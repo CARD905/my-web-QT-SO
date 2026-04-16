@@ -1,0 +1,407 @@
+// import express from "express";
+// import cors from "cors";
+// import { pool } from "./db";
+
+// const app = express();
+// app.use(cors());
+// app.use(express.json());
+
+// /* ================= GET CUSTOMERS ================= */
+// app.get("/customers", async (req, res) => {
+//   const result = await pool.query(
+//     "SELECT * FROM customers ORDER BY customer_id DESC"
+//   );
+//   res.json(result.rows);
+// });
+
+// /* ================= CREATE QUOTATION ================= */
+// app.post("/quotations", async (req, res) => {
+//   const client = await pool.connect();
+
+//   try {
+//     await client.query("BEGIN");
+
+//     const {
+//       customer_id,
+//       customer,
+//       issue_date,
+//       expiry_date,
+//       items
+//     } = req.body;
+
+//     console.log("BODY:", req.body);
+
+//     if (!items || items.length === 0) {
+//       throw new Error("No items");
+//     }
+
+//     let finalCustomerId = customer_id;
+
+//     /* ================= CREATE CUSTOMER ================= */
+//     if (!finalCustomerId) {
+//       const c = await client.query(
+//         `INSERT INTO customers 
+//         (customer_name, customer_company, customer_phone, customer_address, customer_email)
+//         VALUES ($1,$2,$3,$4,$5)
+//         RETURNING customer_id`,
+//         [
+//           customer.customer_name,
+//           customer.customer_company,
+//           customer.customer_phone,
+//           customer.customer_address,
+//           customer.customer_email
+//         ]
+//       );
+
+//       finalCustomerId = c.rows[0].customer_id;
+//     }
+
+//     /* ================= CALC ================= */
+//     const subtotal = items.reduce(
+//       (sum: number, i: any) =>
+//         sum + i.qty * i.unit_price * (1 - i.discount / 100),
+//       0
+//     );
+
+//     const vat = subtotal * 0.07;
+//     const total = subtotal + vat;
+
+//     /* ================= INSERT QUOTATION ================= */
+//     const q = await client.query(
+//       `INSERT INTO quotations 
+//       (quotation_no, customer_id, issue_date, expiry_date, subtotal, vat, total)
+//       VALUES ($1,$2,$3,$4,$5,$6,$7)
+//       RETURNING *`,
+//       [
+//         `QT-${Date.now()}`,
+//         finalCustomerId,
+//         issue_date,
+//         expiry_date,
+//         subtotal,
+//         vat,
+//         total
+//       ]
+//     );
+
+//     const quotation_id = q.rows[0].quotation_id;
+
+//     /* ================= INSERT ITEMS ================= */
+//     for (const i of items) {
+//       console.log("INSERT ITEM:", i);
+
+//       await client.query(
+//         `INSERT INTO quotation_items
+//         (quotation_id, product_name, description, qty, unit_price, discount_percent, total)
+//         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+//         [
+//           quotation_id,
+//           i.product_name,
+//           i.description,
+//           i.qty,
+//           i.unit_price,
+//           i.discount,
+//           i.qty * i.unit_price * (1 - i.discount / 100)
+//         ]
+//       );
+//     }
+
+//     await client.query("COMMIT");
+
+//     res.json({ message: "success", quotation_id });
+
+//   } catch (e) {
+//     await client.query("ROLLBACK");
+
+//     if (e instanceof Error) {
+//       res.status(500).json({ error: e.message });
+//     } else {
+//       res.status(500).json({ error: "unknown error" });
+//     }
+
+//   } finally {
+//     client.release();
+//   }
+// });
+
+// /* ================= GET QUOTATIONS ================= */
+// app.get("/quotations", async (req, res) => {
+//   const result = await pool.query(`
+//     SELECT q.*, c.customer_name
+//     FROM quotations q
+//     LEFT JOIN customers c ON q.customer_id = c.customer_id
+//     ORDER BY q.quotation_id DESC
+//   `);
+
+//   res.json(result.rows);
+// });
+
+// /* ================= GET DETAIL ================= */
+// app.get("/quotations/:id", async (req, res) => {
+//   const { id } = req.params;
+
+//   const q = await pool.query(
+//     "SELECT * FROM quotations WHERE quotation_id=$1",
+//     [id]
+//   );
+
+//   const items = await pool.query(
+//     "SELECT * FROM quotation_items WHERE quotation_id=$1",
+//     [id]
+//   );
+
+//   res.json({
+//     ...q.rows[0],
+//     items: items.rows
+//   });
+// });
+
+// /* ================= UPDATE STATUS ================= */
+// app.put("/quotations/:id/status", async (req, res) => {
+//   const { id } = req.params;
+//   const { status } = req.body;
+
+//   const q = await pool.query(
+//     "UPDATE quotations SET status=$1 WHERE quotation_id=$2 RETURNING *",
+//     [status, id]
+//   );
+
+//   res.json(q.rows[0]);
+// });
+// app.put("/quotations/:id", async (req, res) => {
+//   const { id } = req.params;
+//   const data = req.body;
+
+//   await pool.query(
+//     "UPDATE quotations SET issue_date=$1, expiry_date=$2 WHERE quotation_id=$3",
+//     [data.issue_date, data.expiry_date, id]
+//   );
+
+//   res.json({ message: "updated" });
+// });
+
+// /* ================= START ================= */
+// app.listen(4000, () => {
+//   console.log("Server running on http://localhost:4000");
+// });
+import express from "express";
+import cors from "cors";
+import { pool } from "./db";
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+/* ================= CUSTOMERS ================= */
+app.get("/customers", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT * FROM customers ORDER BY customer_id DESC"
+    );
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "get customers error" });
+  }
+});
+
+/* ================= CREATE QUOTATION ================= */
+app.post("/quotations", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { customer_id, customer, issue_date, expiry_date, items } = req.body;
+
+    if (!items || items.length === 0) {
+      return res.status(400).json({ error: "items required" });
+    }
+
+    let cid = customer_id;
+
+    /* ===== create customer if not select ===== */
+    if (!cid) {
+      if (!customer?.customer_name) {
+        return res.status(400).json({ error: "customer required" });
+      }
+
+      const c = await client.query(
+        `INSERT INTO customers
+        (customer_name, customer_company, customer_phone, customer_address, customer_email)
+        VALUES ($1,$2,$3,$4,$5)
+        RETURNING customer_id`,
+        [
+          customer.customer_name,
+          customer.customer_company,
+          customer.customer_phone,
+          customer.customer_address,
+          customer.customer_email,
+        ]
+      );
+
+      cid = c.rows[0].customer_id;
+    }
+
+    /* ===== calc ===== */
+    const subtotal = items.reduce(
+      (s: number, i: any) =>
+        s + i.qty * i.unit_price * (1 - i.discount / 100),
+      0
+    );
+
+    const vat = subtotal * 0.07;
+    const total = subtotal + vat;
+
+    /* ===== insert quotation ===== */
+    const q = await client.query(
+      `INSERT INTO quotations
+      (quotation_no, customer_id, issue_date, expiry_date, subtotal, vat, total, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'draft')
+      RETURNING *`,
+      [
+        `QT-${Date.now()}`,
+        cid,
+        issue_date || null,
+        expiry_date || null,
+        subtotal,
+        vat,
+        total,
+      ]
+    );
+
+    const qid = q.rows[0].quotation_id;
+
+    /* ===== insert items ===== */
+    for (const i of items) {
+      if (!i.product_name) continue;
+
+      await client.query(
+        `INSERT INTO quotation_items
+        (quotation_id, product_name, description, qty, unit_price, discount_percent, total)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          qid,
+          i.product_name,
+          i.description,
+          i.qty,
+          i.unit_price,
+          i.discount,
+          i.qty * i.unit_price * (1 - i.discount / 100),
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    res.json({ message: "success", quotation_id: qid });
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("CREATE ERROR:", err);
+    res.status(500).json({ error: "create quotation error" });
+  } finally {
+    client.release();
+  }
+});
+
+/* ================= LIST ================= */
+app.get("/quotations", async (req, res) => {
+  try {
+    const r = await pool.query(`
+      SELECT 
+        q.*, 
+        c.customer_name
+      FROM quotations q
+      LEFT JOIN customers c 
+      ON q.customer_id = c.customer_id
+      ORDER BY q.quotation_id DESC
+    `);
+
+    res.json(r.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "list error" });
+  }
+});
+
+/* ================= DETAIL ================= */
+app.get("/quotations/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const q = await pool.query(`
+      SELECT 
+        q.*,
+        c.customer_name,
+        c.customer_company,
+        c.customer_phone,
+        c.customer_address,
+        c.customer_email
+      FROM quotations q
+      LEFT JOIN customers c 
+      ON q.customer_id = c.customer_id
+      WHERE q.quotation_id = $1
+    `, [id]);
+
+    const items = await pool.query(
+      "SELECT * FROM quotation_items WHERE quotation_id=$1",
+      [id]
+    );
+
+    res.json({
+      ...q.rows[0],
+      items: items.rows,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "detail error" });
+  }
+});
+
+/* ================= UPDATE ================= */
+app.put("/quotations/:id", async (req, res) => {
+  const { id } = req.params;
+  const { issue_date, expiry_date } = req.body;
+
+  try {
+    await pool.query(
+      `UPDATE quotations 
+       SET issue_date=$1, expiry_date=$2 
+       WHERE quotation_id=$3`,
+      [issue_date, expiry_date, id]
+    );
+
+    res.json({ message: "updated" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "update error" });
+  }
+});
+
+/* ================= STATUS ================= */
+app.put("/quotations/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    const r = await pool.query(
+      `UPDATE quotations 
+       SET status=$1 
+       WHERE quotation_id=$2 
+       RETURNING *`,
+      [status, id]
+    );
+
+    res.json(r.rows[0]);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "status error" });
+  }
+});
+
+app.listen(4000, () => {
+  console.log(" Server running: http://localhost:4000");
+});
