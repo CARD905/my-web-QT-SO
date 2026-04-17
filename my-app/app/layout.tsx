@@ -1,0 +1,82 @@
+import "./globals.css";
+import Sidebar from "../components/Sidebar";
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="en">
+      <head>
+        {/* ✅ FONT กลับมา */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+
+        {/* ✅ STYLE เดิมของนาย */}
+        <style>{`
+          * { box-sizing: border-box; }
+          body { font-family: 'DM Sans', sans-serif; }
+
+          .sidebar-glow { box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
+
+          .nav-item { position: relative; overflow: hidden; }
+          .nav-item::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 3px;
+            background: #3b82f6;
+            transform: scaleY(0);
+            transition: transform 0.2s ease;
+            border-radius: 0 2px 2px 0;
+          }
+          .nav-item.active::before { transform: scaleY(1); }
+
+          .nav-item .nav-bg {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, rgba(59,130,246,0.15) 0%, transparent 100%);
+            opacity: 0;
+            transition: opacity 0.2s;
+          }
+          .nav-item.active .nav-bg,
+          .nav-item:hover .nav-bg { opacity: 1; }
+
+          @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+
+          .fade-up { animation: fadeInUp 0.35s ease both; }
+          .fade-up-1 { animation-delay: 0.05s; }
+          .fade-up-2 { animation-delay: 0.1s; }
+          .fade-up-3 { animation-delay: 0.15s; }
+        `}</style>
+      </head>
+
+      <body style={{ margin: 0 }}>
+
+        {/* SIDEBAR */}
+        <Sidebar />
+
+        {/* CONTENT */}
+        <main
+          style={{
+            marginLeft: "220px",
+            padding: "24px",
+            minHeight: "100vh",
+            background: "#f4f5f7",
+          }}
+        >
+          {children}
+        </main>
+
+      </body>
+    </html>
+  );
+}
