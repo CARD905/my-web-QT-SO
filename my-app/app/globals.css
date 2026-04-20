@@ -1,26 +1,182 @@
-@import "tailwindcss";
+/* ================================================================
+   globals.css  –  paste this into your app/globals.css
+   ================================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --font-display: 'Outfit', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+  --font-mono: 'DM Mono', monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ---- DARK THEME (default) ---- */
+[data-theme="dark"] {
+  --bg-base: #080810;
+  --bg-card: rgba(255,255,255,0.04);
+  --bg-card-hover: rgba(255,255,255,0.07);
+  --bg-sidebar: rgba(10,10,20,0.96);
+  --border: rgba(255,255,255,0.08);
+  --border-hover: rgba(139,92,246,0.5);
+  --text-primary: #f0eeff;
+  --text-secondary: #9b93c8;
+  --text-muted: #5c5580;
+  --accent: #a78bfa;
+  --accent-2: #f472b6;
+  --accent-glow: rgba(167,139,250,0.2);
+  --gradient-mesh:
+    radial-gradient(ellipse 90% 70% at 50% -15%, rgba(124,58,237,0.22) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 45% at 85% 85%, rgba(244,114,182,0.12) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at -5% 95%, rgba(79,70,229,0.1) 0%, transparent 55%);
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.35);
+  --shadow-glow: 0 0 60px rgba(124,58,237,0.18);
+  --input-bg: rgba(255,255,255,0.05);
+  --scrollbar-thumb: rgba(139,92,246,0.28);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ---- LIGHT THEME ---- */
+[data-theme="light"] {
+  --bg-base: #f2f0ff;
+  --bg-card: rgba(255,255,255,0.88);
+  --bg-card-hover: rgba(255,255,255,0.98);
+  --bg-sidebar: rgba(252,250,255,0.97);
+  --border: rgba(139,92,246,0.1);
+  --border-hover: rgba(124,58,237,0.45);
+  --text-primary: #160e2e;
+  --text-secondary: #6b5f9e;
+  --text-muted: #a99ec8;
+  --accent: #7c3aed;
+  --accent-2: #db2777;
+  --accent-glow: rgba(124,58,237,0.13);
+  --gradient-mesh:
+    radial-gradient(ellipse 90% 70% at 50% -10%, rgba(196,181,253,0.45) 0%, transparent 65%),
+    radial-gradient(ellipse 50% 45% at 90% 90%, rgba(244,114,182,0.25) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 60% at -5% 95%, rgba(165,180,252,0.2) 0%, transparent 55%);
+  --shadow-card: 0 1px 3px rgba(124,58,237,0.07), 0 8px 32px rgba(124,58,237,0.1);
+  --shadow-glow: 0 0 60px rgba(124,58,237,0.08);
+  --input-bg: rgba(124,58,237,0.04);
+  --scrollbar-thumb: rgba(124,58,237,0.22);
+}
+
+/* ================================================================
+   RESET & BASE
+   ================================================================ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  min-height: 100vh;
+  transition: background 0.4s ease, color 0.3s ease;
+}
+
+/* ================================================================
+   ANIMATIONS
+   ================================================================ */
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.45); }
+  70%  { box-shadow: 0 0 0 8px rgba(34,197,94,0); }
+  100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50%       { transform: translateY(-6px); }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 1; }
+}
+
+/* ----------------------------------------------------------------
+   Fade-up utility classes (stagger via animation-delay)
+   ---------------------------------------------------------------- */
+
+.fade-up {
+  animation: fadeUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.fade-up-1 { animation-delay: 0.07s; }
+.fade-up-2 { animation-delay: 0.14s; }
+.fade-up-3 { animation-delay: 0.21s; }
+.fade-up-4 { animation-delay: 0.28s; }
+
+/* ================================================================
+   SCROLLBAR
+   ================================================================ */
+
+::-webkit-scrollbar          { width: 6px; height: 6px; }
+::-webkit-scrollbar-track    { background: transparent; }
+::-webkit-scrollbar-thumb    { background: var(--scrollbar-thumb); border-radius: 8px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+/* ================================================================
+   SELECTION
+   ================================================================ */
+
+::selection {
+  background: rgba(124,58,237,0.25);
+  color: var(--text-primary);
+}
+
+/* ================================================================
+   FOCUS VISIBLE  (keyboard nav accessibility)
+   ================================================================ */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ================================================================
+   INPUT / SELECT — reset appearance for consistent cross-browser
+   ================================================================ */
+
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.4;
+  cursor: pointer;
+  filter: var(--tw-invert, invert(0));
+}
+
+[data-theme="dark"] input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(1);
 }

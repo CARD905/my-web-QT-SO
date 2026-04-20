@@ -378,11 +378,10 @@
 //     </div>
 //   );
 // }
-// page1-list.tsx  →  app/page.tsx  (หน้า All Quotations)
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar, Topbar } from "./layout-components";
+import { SidebarLayout } from "@/components/SidebarLayout";
 
 type Quotation = {
   quotation_id: string;
@@ -394,255 +393,405 @@ type Quotation = {
   total: number;
 };
 
-export default function QuotationsPage() {
-  const [data, setData]         = useState<Quotation[]>([]);
-  const [search, setSearch]     = useState("");
-  const [filter, setFilter]     = useState("all");
-  const [deletingId, setDel]    = useState<string | null>(null);
-  const [loaded, setLoaded]     = useState(false);
+export default function Page() {
+  const [data, setData] = useState<Quotation[]>([]);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [hoveredRow, setHoveredRow] = useState<string | null>(null);
   const router = useRouter();
   const API = process.env.NEXT_PUBLIC_API_URL || "";
 
   useEffect(() => {
+    if (!API) return;
     fetch(`${API}/quotations`)
-      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(res => { if (!res.ok) throw new Error("API error"); return res.json(); })
       .then(d => setData(d || []))
       .catch(() => setData([]))
       .finally(() => setLoaded(true));
   }, [API]);
 
-  const fmt = (n: number) =>
+  const money = (n: number) =>
     n?.toLocaleString("en-US", { style: "currency", currency: "USD" }) ?? "—";
-  const fmtDate = (d: string) =>
-    d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+  const formatDate = (d: string) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  };
 
   const filtered = data.filter(q => {
-    const s = search.toLowerCase();
-    const match = (q.quotation_no + q.customer_name + q.customer_company).toLowerCase().includes(s);
-    const st = filter === "all" || q.status === filter || (filter === "draft" && !q.status);
-    return match && st;
+    const matchSearch =
+      (q.quotation_no || "").toLowerCase().includes(search.toLowerCase()) ||
+      (q.customer_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (q.customer_company || "").toLowerCase().includes(search.toLowerCase());
+    const matchStatus =
+      statusFilter === "all" ||
+      (statusFilter === "draft" && (!q.status || q.status === "draft")) ||
+      q.status === statusFilter;
+    return matchSearch && matchStatus;
   });
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (!confirm("Delete this quotation?")) return;
     try {
-      setDel(id);
+      setDeletingId(id);
       const res = await fetch(`${API}/quotations/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      setData(p => p.filter(q => q.quotation_id !== id));
-    } catch { alert("Delete failed"); } finally { setDel(null); }
+      if (!res.ok) throw new Error("Delete failed");
+      setData(prev => prev.filter(q => q.quotation_id !== id));
+    } catch { alert("Delete failed ❌"); }
+    finally { setDeletingId(null); }
   };
 
-  const statusMap: Record<string, { label: string; cls: string }> = {
-    confirmed: { label: "APPROVED", cls: "badge-confirmed" },
-    sent:      { label: "SENT",     cls: "badge-sent" },
-    draft:     { label: "DRAFT",    cls: "badge-draft" },
-    cancel:    { label: "CANCELLED",cls: "badge-cancel" },
+  const statusConfig: Record<string, { label: string; bg: string; color: string; dot: string }> = {
+    confirmed: { label: "Approved", bg: "rgba(34,197,94,0.12)", color: "#22c55e", dot: "#22c55e" },
+    sent:      { label: "Sent",     bg: "rgba(99,102,241,0.12)", color: "#818cf8", dot: "#818cf8" },
+    cancel:    { label: "Cancelled",bg: "rgba(239,68,68,0.12)", color: "#f87171", dot: "#f87171" },
+    draft:     { label: "Draft",    bg: "rgba(148,163,184,0.1)", color: "#94a3b8", dot: "#94a3b8" },
   };
-  const getS = (q: Quotation) => statusMap[q.status] ?? statusMap.draft;
+  const getStatus = (q: Quotation) => statusConfig[q.status] ?? statusConfig["draft"];
+
+  const statusOptions = [
+    { value: "all", label: "All Statuses" },
+    { value: "draft", label: "Draft" },
+    { value: "sent", label: "Sent" },
+    { value: "confirmed", label: "Approved" },
+    { value: "cancel", label: "Cancelled" },
+  ];
 
   return (
-    <div className="qf-layout">
-      <Sidebar />
-      <div className="qf-content">
-        <Topbar breadcrumbs={["Quotations"]} />
-        <div className="qf-page">
+    <SidebarLayout>
+      <div style={{ padding: "36px 36px 60px", minHeight: "calc(100vh - 56px)" }}>
 
-          {/* ── PAGE HEADER ── */}
-          <div className="anim-0" style={{ marginBottom: "20px" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "12px" }}>
-              <div>
-                {/* Tag pill */}
-                <span style={{
-                  display: "inline-flex", alignItems: "center", gap: "5px",
-                  padding: "3px 10px", borderRadius: "20px",
-                  background: "var(--accent-soft)", border: "1px solid rgba(157,124,248,0.2)",
-                  fontSize: "11px", fontWeight: 700, color: "var(--accent)",
-                  letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "8px",
-                }}>
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                  </svg>
-                  Quotations
-                </span>
-                <h1 style={{ fontSize: "26px", fontWeight: 700, color: "var(--text-primary)", letterSpacing: "-0.025em", lineHeight: 1.2 }}>
-                  All Quotations
-                </h1>
-                <p style={{ fontSize: "13.5px", color: "var(--text-secondary)", marginTop: "4px" }}>
-                  {filtered.length} document{filtered.length !== 1 ? "s" : ""} in your pipeline
-                </p>
-              </div>
-
-              {/* New Quotation Button */}
-              <button
-                className="qf-btn btn-primary"
-                style={{ padding: "10px 20px", fontSize: "13.5px" }}
-                onClick={() => router.push("/create")}
-              >
-                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                </svg>
-                New Quotation
-                <span className="btn-arrow">↗</span>
-              </button>
-            </div>
-          </div>
-
-          {/* ── FILTERS ── */}
-          <div className="anim-1" style={{ display: "flex", gap: "10px", marginBottom: "16px", alignItems: "center" }}>
-            {/* Search */}
-            <div style={{ position: "relative", flex: 1, maxWidth: "420px" }}>
-              <svg style={{ position: "absolute", left: "11px", top: "50%", transform: "translateY(-50%)", color: "var(--text-tertiary)", pointerEvents: "none", width: "14px", height: "14px" }}
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-              </svg>
-              <input
-                className="qf-input"
-                style={{ paddingLeft: "34px" }}
-                placeholder="Search by customer, company or doc number..."
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-              />
-            </div>
-            {/* Status filter */}
-            <div style={{ position: "relative", minWidth: "160px" }}>
-              <select
-                className="qf-input qf-select"
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-              >
-                <option value="all">All Statuses</option>
-                <option value="draft">Draft</option>
-                <option value="sent">Sent</option>
-                <option value="confirmed">Approved</option>
-                <option value="cancel">Cancelled</option>
-              </select>
-              <svg style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-tertiary)", width: "13px", height: "13px" }}
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </div>
-          </div>
-
-          {/* ── TABLE CARD ── */}
-          <div className="qf-card anim-2" style={{ padding: 0 }}>
-            {/* Table head */}
-            <div style={{
-              display: "grid",
-              gridTemplateColumns: "44px 180px 1fr 140px 130px 140px 48px",
-              padding: "8px 16px",
-              borderBottom: "1px solid var(--border-default)",
-              background: "var(--bg-elevated)",
-              borderRadius: "12px 12px 0 0",
+        {/* ---- HEADER ---- */}
+        <div className="fade-up" style={{ marginBottom: "32px" }}>
+          {/* Breadcrumb */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "12px" }}>
+            <span style={{
+              display: "inline-flex", alignItems: "center", gap: "5px",
+              padding: "3px 10px 3px 8px",
+              borderRadius: "20px",
+              background: "rgba(124,58,237,0.1)",
+              border: "1px solid rgba(124,58,237,0.2)",
+              fontSize: "11px", fontWeight: 600,
+              color: "var(--accent)", letterSpacing: "0.04em",
             }}>
-              {["", "DOCUMENT", "CUSTOMER", "DATE", "STATUS", "TOTAL", ""].map((h, i) => (
-                <div key={i} style={{
-                  fontSize: "10.5px", fontWeight: 700, color: "var(--text-tertiary)",
-                  letterSpacing: "0.07em", textAlign: i >= 5 ? "right" : "left",
-                }}>{h}</div>
-              ))}
+              <svg width="11" height="11" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+              </svg>
+              QUOTATIONS
+            </span>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+            <div>
+              <h1 style={{
+                fontFamily: "var(--font-display)",
+                fontSize: "32px", fontWeight: 800,
+                letterSpacing: "-0.04em",
+                color: "var(--text-primary)",
+                lineHeight: 1,
+                marginBottom: "6px",
+              }}>All Quotations</h1>
+              <p style={{ fontSize: "13.5px", color: "var(--text-muted)", fontWeight: 500 }}>
+                {filtered.length} document{filtered.length !== 1 ? "s" : ""} in your pipeline
+              </p>
             </div>
 
-            {/* Empty */}
-            {loaded && filtered.length === 0 && (
-              <div style={{ padding: "56px", textAlign: "center", color: "var(--text-tertiary)", fontSize: "13.5px" }}>
-                No quotations found.
-              </div>
-            )}
+            <button
+              onClick={() => router.push("/create")}
+              style={{
+                display: "flex", alignItems: "center", gap: "8px",
+                padding: "11px 22px",
+                borderRadius: "12px",
+                border: "none",
+                background: "linear-gradient(135deg, #7c3aed, #db2777)",
+                color: "white",
+                fontSize: "14px", fontWeight: 700,
+                fontFamily: "var(--font-display)",
+                letterSpacing: "-0.01em",
+                cursor: "pointer",
+                boxShadow: "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset",
+                transition: "all 0.2s ease",
+                position: "relative",
+                overflow: "hidden",
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 28px rgba(124,58,237,0.5), 0 1px 0 rgba(255,255,255,0.15) inset";
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset";
+              }}
+            >
+              <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              New Quotation
+            </button>
+          </div>
+        </div>
 
-            {/* Rows */}
-            {filtered.map((q, idx) => {
-              const st = getS(q);
-              return (
-                <div
-                  key={q.quotation_id}
-                  onClick={() => router.push(`/detail/${q.quotation_id}`)}
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: "44px 180px 1fr 140px 130px 140px 48px",
-                    padding: "0 16px",
-                    borderBottom: idx < filtered.length - 1 ? "1px solid var(--border-subtle)" : "none",
-                    cursor: "pointer", alignItems: "center", minHeight: "64px",
-                    transition: "background 0.12s",
-                    animation: `fadeUp 0.35s ${0.05 * idx}s ease both`,
-                  }}
-                  onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "var(--bg-muted)"}
-                  onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "transparent"}
-                >
-                  {/* Icon */}
-                  <div>
-                    <div style={{
-                      width: "34px", height: "34px", borderRadius: "9px",
-                      background: "var(--accent-soft)", border: "1px solid rgba(157,124,248,0.18)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                    }}>
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                        <polyline points="14 2 14 8 20 8"/>
-                      </svg>
-                    </div>
-                  </div>
-                  {/* Doc no */}
-                  <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: "13px", fontWeight: 500, color: "var(--accent)" }}>
-                    {q.quotation_no}
-                  </div>
-                  {/* Customer */}
-                  <div>
-                    <div style={{ fontSize: "13.5px", fontWeight: 500, color: "var(--text-primary)" }}>{q.customer_name || "—"}</div>
-                    <div style={{ fontSize: "12px", color: "var(--text-tertiary)", marginTop: "2px" }}>{q.customer_company}</div>
-                  </div>
-                  {/* Date */}
-                  <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>{fmtDate(q.issue_date)}</div>
-                  {/* Status */}
-                  <div>
-                    <span className={`qf-badge ${st.cls}`}>
-                      <span className="qf-badge-dot" />{st.label}
-                    </span>
-                  </div>
-                  {/* Total */}
-                  <div style={{ textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)" }}>
-                    {fmt(q.total)}
-                  </div>
-                  {/* Actions */}
-                  <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-                    <button
-                      onClick={e => handleDelete(e, q.quotation_id)}
-                      disabled={deletingId === q.quotation_id}
-                      style={{
-                        background: "none", border: "none", color: "var(--text-tertiary)",
-                        cursor: "pointer", padding: "5px", borderRadius: "7px",
-                        display: "flex", alignItems: "center",
-                        transition: "color 0.15s, background 0.15s",
-                      }}
-                      onMouseEnter={e => {
-                        (e.currentTarget as HTMLElement).style.color = "var(--red)";
-                        (e.currentTarget as HTMLElement).style.background = "var(--red-soft)";
-                      }}
-                      onMouseLeave={e => {
-                        (e.currentTarget as HTMLElement).style.color = "var(--text-tertiary)";
-                        (e.currentTarget as HTMLElement).style.background = "none";
-                      }}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="3 6 5 6 21 6"/>
-                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                        <path d="M10 11v6M14 11v6"/>
-                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
-                      </svg>
-                    </button>
-                    <svg style={{ color: "var(--text-tertiary)", marginLeft: "2px" }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="9 18 15 12 9 6"/>
+        {/* ---- FILTERS ---- */}
+        <div className="fade-up fade-up-1" style={{ display: "flex", gap: "12px", marginBottom: "20px" }}>
+          {/* Search */}
+          <div style={{ position: "relative", flex: 1, maxWidth: "400px" }}>
+            <svg style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }}
+              width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search by customer, company or doc number..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              style={{
+                width: "100%", paddingLeft: "42px", paddingRight: "16px",
+                paddingTop: "10px", paddingBottom: "10px",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                fontSize: "13.5px",
+                background: "var(--bg-card)",
+                color: "var(--text-primary)",
+                outline: "none",
+                fontFamily: "var(--font-body)",
+                backdropFilter: "blur(10px)",
+                transition: "border-color 0.2s, box-shadow 0.2s",
+              }}
+              onFocus={e => {
+                e.target.style.borderColor = "var(--border-hover)";
+                e.target.style.boxShadow = "0 0 0 3px var(--accent-glow)";
+              }}
+              onBlur={e => {
+                e.target.style.borderColor = "var(--border)";
+                e.target.style.boxShadow = "none";
+              }}
+            />
+          </div>
+
+          {/* Status */}
+          <div style={{ position: "relative" }}>
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              style={{
+                appearance: "none",
+                padding: "10px 38px 10px 16px",
+                border: "1px solid var(--border)",
+                borderRadius: "12px",
+                fontSize: "13.5px",
+                background: "var(--bg-card)",
+                color: "var(--text-primary)",
+                cursor: "pointer",
+                outline: "none",
+                fontFamily: "var(--font-body)",
+                minWidth: "160px",
+                backdropFilter: "blur(10px)",
+                transition: "border-color 0.2s",
+              }}
+              onFocus={e => { e.target.style.borderColor = "var(--border-hover)"; }}
+              onBlur={e => { e.target.style.borderColor = "var(--border)"; }}
+            >
+              {statusOptions.map(o => (
+                <option key={o.value} value={o.value} style={{ background: "var(--bg-base)" }}>{o.label}</option>
+              ))}
+            </select>
+            <svg style={{ position: "absolute", right: "13px", top: "50%", transform: "translateY(-50%)", pointerEvents: "none", color: "var(--text-muted)" }}
+              width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </div>
+        </div>
+
+        {/* ---- TABLE CARD ---- */}
+        <div className="fade-up fade-up-2" style={{
+          background: "var(--bg-card)",
+          borderRadius: "16px",
+          border: "1px solid var(--border)",
+          overflow: "hidden",
+          backdropFilter: "blur(16px)",
+          boxShadow: "var(--shadow-card)",
+        }}>
+          {/* Table header */}
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "190px 1fr 155px 145px 160px 44px",
+            padding: "12px 24px",
+            borderBottom: "1px solid var(--border)",
+          }}>
+            {["DOCUMENT", "CUSTOMER", "DATE", "STATUS", "TOTAL", ""].map((h, i) => (
+              <div key={i} style={{
+                fontSize: "10.5px", fontWeight: 700,
+                color: "var(--accent)",
+                letterSpacing: "0.08em",
+                textAlign: i >= 4 ? "right" : "left",
+              }}>{h}</div>
+            ))}
+          </div>
+
+          {/* Empty */}
+          {loaded && filtered.length === 0 && (
+            <div style={{ padding: "64px 24px", textAlign: "center" }}>
+              <div style={{ fontSize: "36px", marginBottom: "12px" }}>📄</div>
+              <p style={{ color: "var(--text-muted)", fontSize: "14px" }}>No quotations found.</p>
+            </div>
+          )}
+
+          {/* Rows */}
+          {filtered.map((q, idx) => {
+            const st = getStatus(q);
+            const isHovered = hoveredRow === q.quotation_id;
+            return (
+              <div
+                key={q.quotation_id}
+                className="fade-up"
+                onClick={() => router.push(`/detail/${q.quotation_id}`)}
+                onMouseEnter={() => setHoveredRow(q.quotation_id)}
+                onMouseLeave={() => setHoveredRow(null)}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "190px 1fr 155px 145px 160px 44px",
+                  padding: "16px 24px",
+                  borderBottom: idx < filtered.length - 1 ? "1px solid var(--border)" : "none",
+                  cursor: "pointer",
+                  alignItems: "center",
+                  transition: "background 0.15s",
+                  background: isHovered ? "var(--bg-card-hover)" : "transparent",
+                  animationDelay: `${0.1 + idx * 0.04}s`,
+                  position: "relative",
+                }}
+              >
+                {/* Hover accent line */}
+                {isHovered && (
+                  <div style={{
+                    position: "absolute", left: 0, top: 0, bottom: 0,
+                    width: "3px",
+                    background: "linear-gradient(to bottom, var(--accent), var(--accent-2))",
+                    borderRadius: "0 2px 2px 0",
+                  }} />
+                )}
+
+                {/* Doc number */}
+                <div style={{
+                  color: "var(--accent)", fontWeight: 700, fontSize: "13px",
+                  fontFamily: "var(--font-mono)", letterSpacing: "0.01em",
+                  display: "flex", alignItems: "center", gap: "8px",
+                }}>
+                  <div style={{
+                    width: "30px", height: "30px", borderRadius: "8px",
+                    background: "rgba(124,58,237,0.1)",
+                    border: "1px solid rgba(124,58,237,0.2)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}>
+                    <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} style={{ color: "var(--accent)" }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
                     </svg>
                   </div>
+                  {q.quotation_no}
                 </div>
-              );
-            })}
-          </div>
 
+                {/* Customer */}
+                <div>
+                  <div style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
+                    {q.customer_name || "—"}
+                  </div>
+                  <div style={{ fontSize: "11.5px", color: "var(--text-muted)", marginTop: "2px" }}>
+                    {q.customer_company || ""}
+                  </div>
+                </div>
+
+                {/* Date */}
+                <div style={{ fontSize: "13px", color: "var(--text-secondary)" }}>
+                  {formatDate(q.issue_date)}
+                </div>
+
+                {/* Status */}
+                <div>
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", gap: "5px",
+                    background: st.bg, color: st.color,
+                    padding: "4px 10px", borderRadius: "20px",
+                    fontSize: "11.5px", fontWeight: 700,
+                    letterSpacing: "0.03em",
+                    border: `1px solid ${st.color}30`,
+                  }}>
+                    <span style={{
+                      width: "5px", height: "5px", borderRadius: "50%",
+                      background: st.dot, display: "inline-block",
+                      boxShadow: `0 0 6px ${st.dot}`,
+                    }} />
+                    {st.label}
+                  </span>
+                </div>
+
+                {/* Total */}
+                <div style={{
+                  textAlign: "right", fontSize: "14px", fontWeight: 800,
+                  color: "var(--text-primary)",
+                  fontFamily: "var(--font-mono)",
+                  letterSpacing: "-0.02em",
+                }}>
+                  {money(q.total)}
+                </div>
+
+                {/* Delete */}
+                <div style={{ textAlign: "right" }}>
+                  <button
+                    onClick={e => handleDelete(e, q.quotation_id)}
+                    disabled={deletingId === q.quotation_id}
+                    style={{
+                      background: "none", border: "none",
+                      color: "var(--text-muted)", cursor: "pointer",
+                      padding: "6px", borderRadius: "8px",
+                      display: "inline-flex", alignItems: "center",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.color = "#f87171";
+                      (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.1)";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                      (e.currentTarget as HTMLElement).style.background = "none";
+                    }}
+                  >
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+
+                  <button
+                    onClick={e => { e.stopPropagation(); router.push(`/detail/${q.quotation_id}`); }}
+                    style={{
+                      background: "none", border: "none",
+                      color: "var(--text-muted)", cursor: "pointer",
+                      padding: "6px", borderRadius: "8px",
+                      display: "inline-flex", alignItems: "center",
+                      transition: "all 0.15s",
+                    }}
+                    onMouseEnter={e => {
+                      (e.currentTarget as HTMLElement).style.color = "var(--accent)";
+                      (e.currentTarget as HTMLElement).style.background = "var(--accent-glow)";
+                    }}
+                    onMouseLeave={e => {
+                      (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                      (e.currentTarget as HTMLElement).style.background = "none";
+                    }}
+                  >
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
+
       </div>
-    </div>
+    </SidebarLayout>
   );
 }

@@ -83,18 +83,16 @@
 // ครอบทุกหน้าด้วย ThemeProvider และ inject CSS ทั้งหมด
 
 import { ReactNode } from "react";
-import { ThemeProvider, GLOBAL_CSS } from "./theme";
+import { ThemeProvider } from "./theme";
+import "./globals.css";
+
+export const metadata = {
+  title: "Wisdom",
+};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <title>SalesPro</title>
-        {/* Inject global CSS — ทำงานทั้ง dark/light mode ผ่าน [data-theme] */}
-        <style dangerouslySetInnerHTML={{ __html: GLOBAL_CSS }} />
-      </head>
       <body>
         <ThemeProvider>
           {children}
@@ -103,7 +101,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
 /*
   ── วิธีใช้งาน ──────────────────────────────────────────────────
 

@@ -412,332 +412,510 @@
 //     </div>
 //   );
 // }
-// page2-create.tsx  →  app/create/page.tsx
 "use client";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sidebar, Topbar } from "../layout-components";
+import { SidebarLayout } from "@/components/SidebarLayout";
 
-type Customer    = { customer_name:string; customer_company:string; customer_phone:string; customer_address:string; customer_email:string; customer_tax_id?:string; customer_shipping_address?:string; };
-type CustomerDB  = Customer & { customer_id:number };
-type Item        = { product_name:string; description:string; qty:number; unit_price:number; discount:number; type:string };
+type Customer = {
+  customer_name: string;
+  customer_company: string;
+  customer_phone: string;
+  customer_address: string;
+  customer_email: string;
+};
+type CustomerDB = Customer & { customer_id: number };
+type Item = {
+  product_name: string;
+  description: string;
+  qty: number;
+  unit_price: number;
+  discount: number;
+};
+
+/* ---- reusable input style ---- */
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  padding: "10px 14px",
+  border: "1px solid var(--border)",
+  borderRadius: "10px",
+  fontSize: "13.5px",
+  background: "var(--input-bg)",
+  color: "var(--text-primary)",
+  outline: "none",
+  fontFamily: "var(--font-body)",
+  transition: "border-color 0.2s, box-shadow 0.2s",
+};
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label style={{ display: "block", fontSize: "11.5px", fontWeight: 600, color: "var(--text-muted)", marginBottom: "6px", letterSpacing: "0.03em" }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function CreatePage() {
   const router = useRouter();
-  const API    = process.env.NEXT_PUBLIC_API_URL || "";
+  const API = process.env.NEXT_PUBLIC_API_URL || "";
 
-  const [customers, setCustomers]   = useState<CustomerDB[]>([]);
-  const [selId, setSelId]           = useState<number | null>(null);
-  const [customer, setCustomer]     = useState<Customer>({ customer_name:"", customer_company:"", customer_phone:"", customer_address:"", customer_email:"", customer_tax_id:"", customer_shipping_address:"" });
-  const [items, setItems]           = useState<Item[]>([]);
-  const [date, setDate]             = useState("");
-  const [expiry, setExpiry]         = useState("");
-  const [vatOn, setVatOn]           = useState(true);
-  const [notes, setNotes]           = useState("");
-  const [status, setStatus]         = useState("draft");
-  const [saving, setSaving]         = useState(false);
-
-  /* Auto-generate quotation number */
-  const [docNo]                     = useState(() => {
-    const now = new Date();
-    const seq = Math.floor(Math.random() * 900) + 100;
-    return `QT-${now.getFullYear()}-${seq}`;
+  const [customers, setCustomers] = useState<CustomerDB[]>([]);
+  const [selectedCustomerId, setSelectedCustomerId] = useState<number | null>(null);
+  const [customer, setCustomer] = useState<Customer>({
+    customer_name: "", customer_company: "", customer_phone: "",
+    customer_address: "", customer_email: "",
   });
+  const [items, setItems] = useState<Item[]>([{ product_name: "", description: "", qty: 1, unit_price: 0, discount: 0 }]);
+  const [date, setDate] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/customers`).then(r => r.json()).then(setCustomers).catch(() => {});
+    fetch(`${API}/customers`).then(r => r.json()).then(setCustomers);
     const today = new Date();
-    const next  = new Date(); next.setDate(today.getDate() + 30);
+    const next = new Date(); next.setDate(today.getDate() + 30);
     const f = (d: Date) => d.toISOString().split("T")[0];
     setDate(f(today)); setExpiry(f(next));
   }, []);
 
   const selectCustomer = (id: number) => {
-    setSelId(id);
-    const c = customers.find(x => x.customer_id === id);
-    if (c) setCustomer({ customer_name:c.customer_name, customer_company:c.customer_company, customer_phone:c.customer_phone, customer_address:c.customer_address, customer_email:c.customer_email, customer_tax_id:"", customer_shipping_address:c.customer_address });
+    setSelectedCustomerId(id);
+    const c = customers.find(c => c.customer_id === id);
+    if (!c) return;
+    setCustomer({ customer_name: c.customer_name, customer_company: c.customer_company, customer_phone: c.customer_phone, customer_address: c.customer_address, customer_email: c.customer_email });
   };
 
-  const addItem   = () => setItems(p => [...p, { product_name:"", description:"", qty:1, unit_price:0, discount:0, type:"" }]);
-  const delItem   = (i:number) => setItems(p => p.filter((_,idx) => idx !== i));
-  const upd       = <K extends keyof Item>(i:number, k:K, v:Item[K]) => { const n=[...items]; n[i][k]=v; setItems(n); };
+  const addRow = () => setItems([...items, { product_name: "", description: "", qty: 1, unit_price: 0, discount: 0 }]);
+  const deleteRow = (i: number) => setItems(items.filter((_, idx) => idx !== i));
+  const updateItem = <K extends keyof Item>(i: number, field: K, value: Item[K]) => {
+    const n = [...items]; n[i][field] = value; setItems(n);
+  };
 
-  const subtotal  = items.reduce((s,i) => s + i.qty * i.unit_price * (1 - i.discount/100), 0);
-  const discount  = items.reduce((s,i) => s + i.qty * i.unit_price * (i.discount/100), 0);
-  const vat       = vatOn ? subtotal * 0.07 : 0;
-  const total     = subtotal + vat;
-  const fmt       = (n:number) => n.toLocaleString("en-US",{style:"currency",currency:"USD"});
+  const subtotal = items.reduce((s, i) => s + i.qty * i.unit_price * (1 - i.discount / 100), 0);
+  const vat = subtotal * 0.07;
+  const total = subtotal + vat;
+  const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
-  const submit = async (saveAs: "draft" | "submit") => {
-    if (!customer.customer_name) return alert("Please enter customer name");
+  const submit = async () => {
+    if (!customer.customer_name) return alert("กรอกชื่อลูกค้า");
     const validItems = items.filter(i => i.product_name);
-    if (validItems.length === 0) return alert("Please add at least 1 product");
+    if (!validItems.length) return alert("กรอกสินค้าอย่างน้อย 1 รายการ");
     try {
-      setSaving(true);
+      setSubmitting(true);
       const res = await fetch(`${API}/quotations`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ customer_id:selId, customer, issue_date:date, expiry_date:expiry, items:validItems, status:saveAs==="draft"?"draft":"sent", notes, vat_enabled:vatOn }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customer_id: selectedCustomerId, customer, issue_date: date, expiry_date: expiry, items: validItems }),
       });
-      if (!res.ok) throw new Error();
-      router.push("/");
-    } catch { alert("Save failed"); } finally { setSaving(false); }
+      if (!res.ok) throw new Error("Create failed");
+      await res.json();
+      alert("สร้างสำเร็จ ✅");
+      router.push("/quotations");
+    } catch { alert("สร้างไม่สำเร็จ ❌"); }
+    finally { setSubmitting(false); }
+  };
+
+  const focusStyle = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    e.target.style.borderColor = "var(--border-hover)";
+    e.target.style.boxShadow = "0 0 0 3px var(--accent-glow)";
+  };
+  const blurStyle = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    e.target.style.borderColor = "var(--border)";
+    e.target.style.boxShadow = "none";
   };
 
   return (
-    <div className="qf-layout">
-      <Sidebar />
-      <div className="qf-content">
-        <Topbar breadcrumbs={["Quotations", "New", "Edit"]} />
-        <div className="qf-page">
+    <SidebarLayout>
+      <div style={{ padding: "32px 36px 60px" }}>
 
-          {/* ── DOC HEADER ── */}
-          <div className="anim-0" style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px", flexWrap:"wrap", gap:"12px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"14px" }}>
-              <button
-                onClick={() => router.push("/")}
-                style={{ background:"none", border:"none", color:"var(--text-secondary)", cursor:"pointer", display:"flex", alignItems:"center", padding:"4px" }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="15 18 9 12 15 6"/>
-                </svg>
-              </button>
-              <div>
-                <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-                  <span style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:"20px", fontWeight:700, color:"var(--text-primary)", letterSpacing:"-0.01em" }}>{docNo}</span>
-                  <span className="qf-badge badge-draft"><span className="qf-badge-dot"/>DRAFT</span>
-                </div>
-                <div style={{ fontSize:"12px", color:"var(--text-tertiary)", marginTop:"2px" }}>New Quotation</div>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:"10px" }}>
-              <button className="qf-btn btn-ghost" onClick={() => submit("draft")} disabled={saving}>
-                <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-                Save Draft
-              </button>
-              <button className="qf-btn btn-primary" onClick={() => submit("submit")} disabled={saving}>
-                <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                {saving ? "Saving..." : "Submit"}
-                {!saving && <span className="btn-arrow">↗</span>}
-              </button>
-            </div>
+        {/* ---- PAGE HEADER ---- */}
+        <div className="fade-up" style={{ marginBottom: "28px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
+            <button
+              onClick={() => router.push("/quotations")}
+              style={{
+                display: "flex", alignItems: "center", gap: "5px",
+                background: "none", border: "none", cursor: "pointer",
+                color: "var(--text-muted)", fontSize: "12.5px", fontWeight: 500,
+                fontFamily: "var(--font-body)", padding: "4px 0",
+                transition: "color 0.2s",
+              }}
+              onMouseEnter={e => (e.currentTarget as HTMLElement).style.color = "var(--accent)"}
+              onMouseLeave={e => (e.currentTarget as HTMLElement).style.color = "var(--text-muted)"}
+            >
+              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Quotations
+            </button>
+            <span style={{ color: "var(--border)", fontSize: "12px" }}>/</span>
+            <span style={{ color: "var(--text-secondary)", fontSize: "12.5px" }}>New</span>
+            <span style={{ color: "var(--border)", fontSize: "12px" }}>/</span>
+            <span style={{ color: "var(--text-secondary)", fontSize: "12.5px" }}>Edit</span>
           </div>
+          <h1 style={{
+            fontFamily: "var(--font-display)", fontSize: "28px", fontWeight: 800,
+            letterSpacing: "-0.04em", color: "var(--text-primary)",
+          }}>Create Quotation</h1>
+        </div>
 
-          {/* ── DOCUMENT DETAILS ── */}
-          <div className="qf-card anim-1" style={{ marginBottom:"16px" }}>
-            <div className="qf-card-title">
-              <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              Document Details
-            </div>
-            <div className="qf-form-row cols-4">
-              <div>
-                <label className="qf-label">Document Number</label>
-                <input className="qf-input" value={docNo} readOnly style={{ opacity:.65, cursor:"default" }}/>
+        {/* ---- TOP DATE BAR ---- */}
+        <div className="fade-up fade-up-1" style={{
+          background: "var(--bg-card)", borderRadius: "14px", border: "1px solid var(--border)",
+          padding: "18px 24px", marginBottom: "20px",
+          display: "flex", justifyContent: "space-between", alignItems: "center",
+          backdropFilter: "blur(12px)",
+        }}>
+          <div>
+            <p style={{ fontFamily: "var(--font-display)", fontSize: "15px", fontWeight: 700, color: "var(--text-primary)" }}>
+              New Quotation
+            </p>
+            <p style={{ fontSize: "12px", color: "var(--text-muted)", marginTop: "2px" }}>Enterprise Sales System</p>
+          </div>
+          <div style={{ display: "flex", gap: "12px" }}>
+            {[
+              { label: "Issue Date", value: date, onChange: setDate },
+              { label: "Expiry Date", value: expiry, onChange: setExpiry },
+            ].map(f => (
+              <div key={f.label}>
+                <label style={{ display: "block", fontSize: "10.5px", color: "var(--text-muted)", fontWeight: 600, marginBottom: "4px", letterSpacing: "0.04em" }}>{f.label}</label>
+                <input
+                  type="date" value={f.value}
+                  onChange={e => f.onChange(e.target.value)}
+                  style={{ ...inputStyle, width: "auto", padding: "8px 12px" }}
+                  onFocus={focusStyle} onBlur={blurStyle}
+                />
               </div>
-              <div>
-                <label className="qf-label">Date</label>
-                <input type="date" className="qf-input" value={date} onChange={e => setDate(e.target.value)}/>
-              </div>
-              <div>
-                <label className="qf-label">Expiry Date</label>
-                <input type="date" className="qf-input" value={expiry} onChange={e => setExpiry(e.target.value)}/>
-              </div>
-              <div>
-                <label className="qf-label">Status</label>
-                <div style={{ position:"relative" }}>
-                  <select className="qf-input qf-select" value={status} onChange={e => setStatus(e.target.value)}>
-                    <option value="draft">Draft</option>
-                    <option value="sent">Sent</option>
-                    <option value="confirmed">Confirmed</option>
-                  </select>
-                  <svg style={{ position:"absolute", right:"10px", top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:"var(--text-tertiary)", width:"13px", height:"13px" }}
-                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "20px", alignItems: "start" }}>
+
+          {/* ---- LEFT ---- */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+            {/* CUSTOMER CARD */}
+            <div className="fade-up fade-up-1" style={{
+              background: "var(--bg-card)", borderRadius: "14px", border: "1px solid var(--border)",
+              padding: "24px", backdropFilter: "blur(12px)", boxShadow: "var(--shadow-card)",
+            }}>
+              <h2 style={{
+                fontFamily: "var(--font-display)", fontSize: "15px", fontWeight: 700,
+                color: "var(--text-primary)", marginBottom: "18px",
+                display: "flex", alignItems: "center", gap: "8px",
+              }}>
+                <span style={{
+                  width: "28px", height: "28px", borderRadius: "8px",
+                  background: "rgba(124,58,237,0.12)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                   </svg>
-                </div>
-              </div>
-            </div>
-          </div>
+                </span>
+                Customer Information
+              </h2>
 
-          {/* ── CUSTOMER INFORMATION ── */}
-          <div className="qf-card anim-2" style={{ marginBottom:"16px" }}>
-            <div className="qf-card-title">
-              <svg viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-              Customer Information
-            </div>
-
-            {/* Select customer */}
-            <div className="qf-form-row cols-2" style={{ marginBottom:"14px" }}>
-              <div>
-                <label className="qf-label">Customer</label>
-                <div style={{ position:"relative" }}>
-                  <select className="qf-input qf-select" value={selId ?? ""} onChange={e => selectCustomer(Number(e.target.value))}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                <Field label="SELECT CUSTOMER">
+                  <select
+                    value={selectedCustomerId || ""}
+                    onChange={e => selectCustomer(Number(e.target.value))}
+                    style={{ ...inputStyle }}
+                    onFocus={focusStyle} onBlur={blurStyle}
+                  >
                     <option value="">Select customer...</option>
-                    {customers.map(c => <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>)}
+                    {customers.map(c => (
+                      <option key={c.customer_id} value={c.customer_id}>{c.customer_name}</option>
+                    ))}
                   </select>
-                  <svg style={{ position:"absolute", right:"10px", top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:"var(--text-tertiary)", width:"13px", height:"13px" }}
-                    viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                  </svg>
+                </Field>
+
+                <Field label="CUSTOMER NAME">
+                  <input placeholder="Full name" value={customer.customer_name}
+                    onChange={e => setCustomer({ ...customer, customer_name: e.target.value })}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </Field>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <Field label="COMPANY">
+                    <input placeholder="Company name" value={customer.customer_company}
+                      onChange={e => setCustomer({ ...customer, customer_company: e.target.value })}
+                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                  </Field>
+                  <Field label="PHONE">
+                    <input placeholder="+1 000 000 0000" value={customer.customer_phone}
+                      onChange={e => setCustomer({ ...customer, customer_phone: e.target.value })}
+                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                  </Field>
                 </div>
-              </div>
-              <div>
-                <label className="qf-label">Company</label>
-                <input className="qf-input" placeholder="" value={customer.customer_company} onChange={e => setCustomer({...customer, customer_company:e.target.value})}/>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <Field label="BILLING ADDRESS">
+                    <input placeholder="Address" value={customer.customer_address}
+                      onChange={e => setCustomer({ ...customer, customer_address: e.target.value })}
+                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                  </Field>
+                  <Field label="SHIPPING ADDRESS">
+                    <input placeholder="Same as billing" value={customer.customer_address}
+                      onChange={e => setCustomer({ ...customer, customer_address: e.target.value })}
+                      style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                  </Field>
+                </div>
+
+                <Field label="EMAIL">
+                  <input type="email" placeholder="email@company.com" value={customer.customer_email}
+                    onChange={e => setCustomer({ ...customer, customer_email: e.target.value })}
+                    style={inputStyle} onFocus={focusStyle} onBlur={blurStyle} />
+                </Field>
               </div>
             </div>
 
-            <div className="qf-form-row cols-2" style={{ marginBottom:"14px" }}>
-              <div>
-                <label className="qf-label">Tax ID</label>
-                <input className="qf-input" placeholder="" value={customer.customer_tax_id||""} onChange={e => setCustomer({...customer, customer_tax_id:e.target.value})}/>
+            {/* PRODUCTS CARD */}
+            <div className="fade-up fade-up-2" style={{
+              background: "var(--bg-card)", borderRadius: "14px", border: "1px solid var(--border)",
+              padding: "24px", backdropFilter: "blur(12px)", boxShadow: "var(--shadow-card)",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
+                <h2 style={{
+                  fontFamily: "var(--font-display)", fontSize: "15px", fontWeight: 700,
+                  color: "var(--text-primary)",
+                  display: "flex", alignItems: "center", gap: "8px",
+                }}>
+                  <span style={{
+                    width: "28px", height: "28px", borderRadius: "8px",
+                    background: "rgba(124,58,237,0.12)",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="var(--accent)" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                    </svg>
+                  </span>
+                  Products
+                </h2>
+                <button
+                  onClick={addRow}
+                  style={{
+                    display: "flex", alignItems: "center", gap: "6px",
+                    padding: "8px 16px", borderRadius: "10px", 
+                    background: "rgba(124,58,237,0.12)",
+                    color: "var(--accent)",
+                    fontSize: "13px", fontWeight: 700,
+                    fontFamily: "var(--font-body)",
+                    cursor: "pointer", transition: "all 0.2s",
+                    border: "1px solid rgba(124,58,237,0.2)" as any,
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.2)";
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(-1px)";
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLElement).style.background = "rgba(124,58,237,0.12)";
+                    (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+                  }}
+                >
+                  <svg width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Item
+                </button>
               </div>
-              <div>
-                <label className="qf-label">Phone</label>
-                <input className="qf-input" placeholder="" value={customer.customer_phone} onChange={e => setCustomer({...customer, customer_phone:e.target.value})}/>
-              </div>
-            </div>
 
-            <div className="qf-form-row" style={{ marginBottom:"14px" }}>
-              <div>
-                <label className="qf-label">Email</label>
-                <input type="email" className="qf-input" placeholder="" value={customer.customer_email} onChange={e => setCustomer({...customer, customer_email:e.target.value})}/>
-              </div>
-            </div>
-
-            <div className="qf-form-row cols-2">
-              <div>
-                <label className="qf-label">Billing Address</label>
-                <input className="qf-input" placeholder="" value={customer.customer_address} onChange={e => setCustomer({...customer, customer_address:e.target.value})}/>
-              </div>
-              <div>
-                <label className="qf-label">Shipping Address</label>
-                <input className="qf-input" placeholder="" value={customer.customer_shipping_address||""} onChange={e => setCustomer({...customer, customer_shipping_address:e.target.value})}/>
-              </div>
-            </div>
-          </div>
-
-          {/* ── PRODUCTS ── */}
-          <div className="qf-card anim-3" style={{ marginBottom:"16px" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"14px", paddingBottom:"12px", borderBottom:"1px solid var(--border-subtle)" }}>
-              <span className="qf-card-title" style={{ marginBottom:0, paddingBottom:0, border:"none" }}>
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-                  <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-                </svg>
-                Products
-              </span>
-              <button className="qf-btn btn-ghost" style={{ padding:"6px 14px", fontSize:"12.5px" }} onClick={addItem}>
-                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-                Add Item
-              </button>
-            </div>
-
-            {items.length === 0 ? (
-              <div style={{ padding:"36px", textAlign:"center", color:"var(--text-tertiary)", fontSize:"13.5px" }}>
-                No items yet. Click "Add Item" to begin.
-              </div>
-            ) : (
-              <div className="qf-table-wrap">
-                <table className="qf-table">
+              {/* Table */}
+              <div style={{ overflowX: "auto" }}>
+                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "13px" }}>
                   <thead>
-                    <tr>
-                      <th style={{ width:"22%" }}>Product</th>
-                      <th style={{ width:"24%" }}>Description</th>
-                      <th style={{ width:"8%" }}>Qty</th>
-                      <th style={{ width:"13%" }}>Unit Price</th>
-                      <th style={{ width:"9%" }}>Discount</th>
-                      <th style={{ width:"10%" }}>Type</th>
-                      <th className="r" style={{ width:"11%" }}>Line Total</th>
-                      <th style={{ width:"3%" }}></th>
+                    <tr style={{ borderBottom: "1px solid var(--border)" }}>
+                      {["Product", "Description", "Qty", "Unit Price", "Discount", "Type", "Line Total", ""].map((h, i) => (
+                        <th key={i} style={{
+                          padding: "8px 10px", textAlign: i >= 2 ? "center" : "left",
+                          fontSize: "10.5px", fontWeight: 700, color: "var(--text-muted)",
+                          letterSpacing: "0.06em", whiteSpace: "nowrap",
+                        }}>{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item, i) => (
-                      <tr key={i}>
-                        <td><input className="qf-input" style={{ padding:"6px 9px", fontSize:"13px" }} value={item.product_name} onChange={e => upd(i,"product_name",e.target.value)}/></td>
-                        <td><input className="qf-input" style={{ padding:"6px 9px", fontSize:"13px" }} value={item.description} onChange={e => upd(i,"description",e.target.value)}/></td>
-                        <td><input type="number" className="qf-input" style={{ padding:"6px 9px", fontSize:"13px" }} value={item.qty} onChange={e => upd(i,"qty",Number(e.target.value))}/></td>
-                        <td><input type="number" className="qf-input" style={{ padding:"6px 9px", fontSize:"13px" }} value={item.unit_price} onChange={e => upd(i,"unit_price",Number(e.target.value))}/></td>
-                        <td><input type="number" className="qf-input" style={{ padding:"6px 9px", fontSize:"13px" }} value={item.discount} onChange={e => upd(i,"discount",Number(e.target.value))}/></td>
-                        <td>
-                          <div style={{ position:"relative" }}>
-                            <select className="qf-input qf-select" style={{ padding:"6px 28px 6px 9px", fontSize:"13px" }} value={item.type} onChange={e => upd(i,"type",e.target.value)}>
-                              <option value="">—</option>
-                              <option value="product">Product</option>
-                              <option value="service">Service</option>
-                            </select>
-                            <svg style={{ position:"absolute", right:"7px", top:"50%", transform:"translateY(-50%)", pointerEvents:"none", color:"var(--text-tertiary)", width:"11px", height:"11px" }}
-                              viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-                          </div>
-                        </td>
-                        <td style={{ textAlign:"right", fontFamily:"'JetBrains Mono',monospace", fontSize:"13px", fontWeight:500, color:"var(--text-primary)" }}>
-                          {fmt(item.qty * item.unit_price * (1 - item.discount / 100))}
-                        </td>
-                        <td>
-                          <button
-                            onClick={() => delItem(i)}
-                            style={{ background:"none", border:"none", color:"var(--text-tertiary)", cursor:"pointer", padding:"4px", borderRadius:"6px", display:"flex", alignItems:"center" }}
-                            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color="var(--red)"; (e.currentTarget as HTMLElement).style.background="var(--red-soft)"; }}
-                            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color="var(--text-tertiary)"; (e.currentTarget as HTMLElement).style.background="none"; }}
-                          >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                          </button>
+                    {items.length === 0 && (
+                      <tr>
+                        <td colSpan={8} style={{ padding: "40px", textAlign: "center", color: "var(--text-muted)", fontSize: "13.5px" }}>
+                          No items yet. Click "Add Item" to begin.
                         </td>
                       </tr>
-                    ))}
+                    )}
+                    {items.map((item, i) => {
+                      const lineTotal = item.qty * item.unit_price * (1 - item.discount / 100);
+                      return (
+                        <tr key={i} style={{ borderBottom: "1px solid var(--border)" }}>
+                          <td style={{ padding: "8px 6px" }}>
+                            <input value={item.product_name}
+                              onChange={e => updateItem(i, "product_name", e.target.value)}
+                              placeholder="Product name"
+                              style={{ ...inputStyle, width: "140px", padding: "8px 10px", fontSize: "13px" }}
+                              onFocus={focusStyle} onBlur={blurStyle} />
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <input value={item.description}
+                              onChange={e => updateItem(i, "description", e.target.value)}
+                              placeholder="Description"
+                              style={{ ...inputStyle, width: "160px", padding: "8px 10px", fontSize: "13px" }}
+                              onFocus={focusStyle} onBlur={blurStyle} />
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <input type="number" value={item.qty}
+                              onChange={e => updateItem(i, "qty", Number(e.target.value))}
+                              style={{ ...inputStyle, width: "62px", padding: "8px 10px", fontSize: "13px", textAlign: "center" }}
+                              onFocus={focusStyle} onBlur={blurStyle} />
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <input type="number" value={item.unit_price}
+                              onChange={e => updateItem(i, "unit_price", Number(e.target.value))}
+                              style={{ ...inputStyle, width: "100px", padding: "8px 10px", fontSize: "13px", textAlign: "right" }}
+                              onFocus={focusStyle} onBlur={blurStyle} />
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <input type="number" value={item.discount}
+                              onChange={e => updateItem(i, "discount", Number(e.target.value))}
+                              style={{ ...inputStyle, width: "70px", padding: "8px 10px", fontSize: "13px", textAlign: "center" }}
+                              onFocus={focusStyle} onBlur={blurStyle} />
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <select style={{ ...inputStyle, width: "70px", padding: "8px 8px", fontSize: "12px" }}>
+                              <option>%</option>
+                              <option>$</option>
+                            </select>
+                          </td>
+                          <td style={{ padding: "8px 12px", textAlign: "right", fontWeight: 700, fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-primary)", whiteSpace: "nowrap" }}>
+                            {money(lineTotal)}
+                          </td>
+                          <td style={{ padding: "8px 6px" }}>
+                            <button onClick={() => deleteRow(i)} style={{
+                              background: "none", border: "none", cursor: "pointer",
+                              color: "var(--text-muted)", padding: "6px", borderRadius: "6px",
+                              display: "flex", alignItems: "center", transition: "all 0.15s",
+                            }}
+                              onMouseEnter={e => {
+                                (e.currentTarget as HTMLElement).style.color = "#f87171";
+                                (e.currentTarget as HTMLElement).style.background = "rgba(239,68,68,0.1)";
+                              }}
+                              onMouseLeave={e => {
+                                (e.currentTarget as HTMLElement).style.color = "var(--text-muted)";
+                                (e.currentTarget as HTMLElement).style.background = "none";
+                              }}
+                            >
+                              <svg width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* ── SUMMARY ── */}
-          <div className="qf-card anim-4" style={{ marginBottom:"16px" }}>
-            <div className="qf-card-title">
-              <svg viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-              Summary
-            </div>
-            <div style={{ display:"flex", justifyContent:"flex-end" }}>
-              <div style={{ width:"300px" }}>
-                <div className="qf-summary-row"><span>Subtotal</span><span className="qf-summary-val">{fmt(subtotal + discount)}</span></div>
-                <div className="qf-summary-row"><span>Discount</span><span className="qf-summary-val" style={{ color:"var(--red)" }}>-{fmt(discount)}</span></div>
-                <div className="qf-summary-row">
-                  <div className="qf-toggle-wrap">
-                    <span>VAT (7%)</span>
-                    <button className={`qf-toggle ${vatOn?"on":""}`} onClick={() => setVatOn(v=>!v)}>
-                      <div className="qf-toggle-knob"/>
-                    </button>
+          {/* ---- RIGHT SUMMARY ---- */}
+          <div className="fade-up fade-up-3" style={{
+            position: "sticky", top: "76px",
+            background: "var(--bg-card)", borderRadius: "14px", border: "1px solid var(--border)",
+            padding: "24px", backdropFilter: "blur(12px)", boxShadow: "var(--shadow-card)",
+          }}>
+            <h2 style={{
+              fontFamily: "var(--font-display)", fontSize: "13px", fontWeight: 700,
+              color: "var(--text-muted)", letterSpacing: "0.08em", marginBottom: "20px",
+            }}>SUMMARY</h2>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
+              {[
+                { label: "Subtotal", value: subtotal, color: "var(--text-secondary)" },
+                { label: "Discount", value: 0, color: "#f87171", prefix: "-" },
+                { label: "VAT (7%)", value: vat, color: "var(--text-secondary)" },
+              ].map(row => (
+                <div key={row.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontWeight: 500 }}>{row.label}</span>
+                  <span style={{ fontSize: "13.5px", color: row.color, fontWeight: 600, fontFamily: "var(--font-mono)" }}>
+                    {row.prefix}{money(row.value)}
+                  </span>
+                </div>
+              ))}
+
+              {/* VAT toggle */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>VAT (7%)</span>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
+                  <div style={{
+                    width: "38px", height: "22px", borderRadius: "11px",
+                    background: "linear-gradient(135deg, var(--accent), var(--accent-2))",
+                    position: "relative",
+                  }}>
+                    <div style={{
+                      position: "absolute", right: "3px", top: "3px",
+                      width: "16px", height: "16px", borderRadius: "50%", background: "white",
+                    }} />
                   </div>
-                  <span className="qf-summary-val">{fmt(vat)}</span>
-                </div>
-                <div className="qf-summary-total">
-                  <span className="qf-summary-total-label">Grand Total</span>
-                  <span className="qf-summary-total-val">{fmt(total)}</span>
-                </div>
+                  <span style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{money(vat)}</span>
+                </label>
               </div>
             </div>
-          </div>
 
-          {/* ── NOTES ── */}
-          <div className="qf-card anim-5" style={{ marginBottom:"16px" }}>
-            <div className="qf-card-title">
-              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-              Notes
+            <div style={{
+              borderTop: "1px solid var(--border)", paddingTop: "16px",
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              marginBottom: "24px",
+            }}>
+              <span style={{ fontSize: "14px", fontWeight: 800, fontFamily: "var(--font-display)", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
+                GRAND TOTAL
+              </span>
+              <span style={{
+                fontSize: "22px", fontWeight: 900,
+                fontFamily: "var(--font-mono)",
+                letterSpacing: "-0.03em",
+                background: "linear-gradient(135deg, var(--accent), var(--accent-2))",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+              }}>
+                {money(total)}
+              </span>
             </div>
-            <textarea
-              className="qf-input"
-              rows={4}
-              placeholder="Additional remarks..."
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              style={{ resize:"vertical", lineHeight:"1.6" }}
-            />
+
+            <button
+              onClick={submit}
+              disabled={submitting}
+              style={{
+                width: "100%", padding: "13px",
+                borderRadius: "12px", border: "none",
+                background: submitting ? "var(--border)" : "linear-gradient(135deg, #7c3aed, #db2777)",
+                color: "white",
+                fontSize: "14px", fontWeight: 800,
+                fontFamily: "var(--font-display)", letterSpacing: "-0.01em",
+                cursor: submitting ? "not-allowed" : "pointer",
+                boxShadow: submitting ? "none" : "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={e => {
+                if (!submitting) {
+                  (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
+                  (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 28px rgba(124,58,237,0.5), 0 1px 0 rgba(255,255,255,0.15) inset";
+                }
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
+                (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset";
+              }}
+            >
+              {submitting ? "Saving..." : "✦ Save Quotation"}
+            </button>
           </div>
 
         </div>
       </div>
-    </div>
+    </SidebarLayout>
   );
 }
