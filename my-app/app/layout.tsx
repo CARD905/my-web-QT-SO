@@ -1,5 +1,12 @@
-
+import "./globals.css";
 import Sidebar from "../components/Sidebar";
+import type { Metadata } from "next";
+
+// ✅ ใช้ metadata แทน <head>
+export const metadata: Metadata = {
+  title: "My App",
+  description: "My dashboard app",
+};
 
 export default function RootLayout({
   children,
@@ -8,19 +15,15 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <head>
-        {/* ✅ FONT กลับมา */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap"
-          rel="stylesheet"
-        />
-
-        {/* ✅ STYLE เดิมของนาย */}
+      <body
+        style={{
+          margin: 0,
+          fontFamily: "DM Sans, sans-serif",
+        }}
+      >
+        {/* ✅ STYLE */}
         <style>{`
           * { box-sizing: border-box; }
-          body { font-family: 'DM Sans', sans-serif; }
 
           .sidebar-glow { box-shadow: 4px 0 24px rgba(0,0,0,0.4); }
 
@@ -57,14 +60,11 @@ export default function RootLayout({
           .fade-up-2 { animation-delay: 0.1s; }
           .fade-up-3 { animation-delay: 0.15s; }
         `}</style>
-      </head>
 
-      <body style={{ margin: 0 }}>
-
-        {/* SIDEBAR */}
+        {/* ✅ SIDEBAR */}
         <Sidebar />
 
-        {/* CONTENT */}
+        {/* ✅ CONTENT */}
         <main
           style={{
             marginLeft: "220px",
@@ -75,7 +75,6 @@ export default function RootLayout({
         >
           {children}
         </main>
-
       </body>
     </html>
   );
