@@ -624,20 +624,42 @@ app.post("/quotations", async (req, res) => {
   }
 });
 
-/* ================= GET ================= */
-app.get("/quotations", async (req, res) => {
-  try {
-    const r = await pool.query(`
-      SELECT q.*, c.customer_name, c.customer_company
-      FROM quotations q
-      LEFT JOIN customers c ON q.customer_id = c.customer_id
-      ORDER BY q.quotation_id DESC
-    `);
+/* ================= DETAIL ================= */
+app.get("/quotations/:id", async (req, res) => {
+  const { id } = req.params;
 
-    res.json(r.rows);
+  try {
+    const q = await pool.query(`
+      SELECT 
+        q.*,
+        c.customer_name,
+        c.customer_company,
+        c.customer_phone,
+        c.customer_address,
+        c.customer_email
+      FROM quotations q
+      LEFT JOIN customers c 
+      ON q.customer_id = c.customer_id
+      WHERE q.quotation_id = $1
+    `, [id]);
+
+    if (q.rows.length === 0) {
+      return res.status(404).json({ error: "Quotation not found" });
+    }
+
+    const items = await pool.query(
+      `SELECT * FROM quotation_items WHERE quotation_id = $1`,
+      [id]
+    );
+
+    res.json({
+      ...q.rows[0],
+      items: items.rows,
+    });
 
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    console.error(err.message);
+    res.status(500).json({ error: "detail error" });
   }
 });
 /* ================= GET CUSTOMERS ================= */

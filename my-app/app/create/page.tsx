@@ -141,7 +141,7 @@ export default function CreatePage() {
         <div className="fade-up" style={{ marginBottom: "28px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px" }}>
             <button
-              onClick={() => router.push("/quotations")}
+              onClick={() => router.push("/sale-order")}
               style={{
                 display: "flex", alignItems: "center", gap: "5px",
                 background: "none", border: "none", cursor: "pointer",
