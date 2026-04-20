@@ -86,23 +86,43 @@ export default function CreatePage() {
   const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
   const submit = async () => {
-    if (!customer.customer_name) return alert("กรอกชื่อลูกค้า");
-    const validItems = items.filter(i => i.product_name);
-    if (!validItems.length) return alert("กรอกสินค้าอย่างน้อย 1 รายการ");
-    try {
-      setSubmitting(true);
-      const res = await fetch(`${API}/quotations`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customer_id: selectedCustomerId, customer, issue_date: date, expiry_date: expiry, items: validItems }),
-      });
-      if (!res.ok) throw new Error("Create failed");
-      await res.json();
-      alert("สร้างสำเร็จ ✅");
-      router.push("/quotations");
-    } catch { alert("สร้างไม่สำเร็จ ❌"); }
-    finally { setSubmitting(false); }
-  };
+  setSubmitting(true);
+
+  try {
+    const res = await fetch(`${API}/quotations`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        customer_id: selectedCustomerId,
+        customer,
+        issue_date: date,
+        expiry_date: expiry,
+        items,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      console.error(data);
+      alert(data.error || "error");
+      return;
+    }
+
+    alert("บันทึกสำเร็จ ✅");
+
+    // 🔥 เพิ่มอันนี้ (สำคัญ)
+    router.push("/quotations");
+
+  } catch (err) {
+    console.error("FETCH ERROR:", err);
+    alert("เชื่อม API ไม่ได้ ❌");
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   const focusStyle = (e: React.FocusEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     e.target.style.borderColor = "var(--border-hover)";
