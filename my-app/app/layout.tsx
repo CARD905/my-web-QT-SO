@@ -101,37 +101,3 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-/*
-  ── วิธีใช้งาน ──────────────────────────────────────────────────
-
-  โครงสร้างไฟล์ที่ต้องการ:
-  ├── app/
-  │   ├── layout.tsx              ← ไฟล์นี้
-  │   ├── theme.tsx               ← ThemeProvider + GLOBAL_CSS
-  │   ├── layout-components.tsx   ← Sidebar + Topbar
-  │   ├── page.tsx                ← page1-list.tsx
-  │   ├── create/
-  │   │   └── page.tsx            ← page2-create.tsx
-  │   └── detail/
-  │       └── [id]/
-  │           └── page.tsx        ← page3-detail.tsx
-
-  ── Dark / Light mode ───────────────────────────────────────────
-
-  Dark/Light toggle ใช้งานได้จริงทุกหน้าผ่าน ThemeProvider
-  ที่ใช้ [data-theme="dark"] / [data-theme="light"] attribute
-  บน div ที่ครอบทุกหน้า
-
-  CSS variables ทุกตัวจะ switch อัตโนมัติ ไม่ต้องทำอะไรเพิ่ม
-
-  ── ปุ่ม toggle ─────────────────────────────────────────────────
-
-  อยู่ใน Topbar ทุกหน้า (มุมขวาบน) — กดแล้ว switch ทันที
-  ค่าจะถูก save ลง localStorage ด้วย key "qf-theme"
-  รีเฟรชหน้าก็ยังจำ mode ที่เลือกไว้
-
-  ── Font ────────────────────────────────────────────────────────
-
-  Plus Jakarta Sans — อ่านง่าย มีความเป็นทางการพอดี ไม่แข็งไม่นุ่มเกิน
-  JetBrains Mono    — สำหรับตัวเลข, doc number ให้ดูเป็น professional
-*/
