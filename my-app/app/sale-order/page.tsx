@@ -68,7 +68,7 @@ export default function SaleOrdersPage() {
             </div>
 
             <button
-              onClick={() => router.push("/quotations")}
+              onClick={() => router.push("/")}
               style={{
                 display: "flex", alignItems: "center", gap: "7px",
                 padding: "10px 20px", borderRadius: "12px",
