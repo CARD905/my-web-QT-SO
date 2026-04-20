@@ -576,6 +576,7 @@ app.post("/quotations", async (req, res) => {
     );
 
     const qid = q.rows[0].quotation_id;
+    
 
     /* ===== INSERT ITEMS ===== */
     for (const i of items) {
@@ -637,6 +638,20 @@ app.get("/quotations", async (req, res) => {
 
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+/* ================= GET CUSTOMERS ================= */
+app.get("/customers", async (req, res) => {
+  try {
+    const r = await pool.query(
+      "SELECT * FROM customers ORDER BY customer_id DESC"
+    );
+
+    res.json(r.rows);
+
+  } catch (err: any) {
+    console.error("GET CUSTOMERS ERROR:", err.message);
+    res.status(500).json({ error: "get customers error" });
   }
 });
 
