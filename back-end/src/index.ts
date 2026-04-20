@@ -25,7 +25,7 @@ app.use((req, res, next) => {
 });
 
 /* =========================================================
-   GET ALL QUOTATIONS  (ต้องมาก่อน /:id)
+   GET ALL QUOTATIONS
 ========================================================= */
 app.get("/quotations", async (req, res) => {
   try {
@@ -80,7 +80,7 @@ app.get("/quotations/:id", async (req, res) => {
 
     res.json({
       ...q.rows[0],
-      items: items.rows,
+      items: items.rows || []
     });
 
   } catch (err: any) {
@@ -211,7 +211,111 @@ app.post("/quotations", async (req, res) => {
 });
 
 /* =========================================================
-   UPDATE STATUS (confirm / cancel)
+   🔥 UPDATE FULL (EDIT PAGE ใช้ตัวนี้)
+========================================================= */
+app.put("/quotations/:id", async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { customer, issue_date, expiry_date, items } = req.body;
+
+    if (!items || !Array.isArray(items)) {
+      throw new Error("items required");
+    }
+
+    /* ===== UPDATE CUSTOMER ===== */
+    await client.query(`
+      UPDATE customers SET
+        customer_name=$1,
+        customer_company=$2,
+        customer_phone=$3,
+        customer_address=$4,
+        customer_email=$5
+      WHERE customer_id = (
+        SELECT customer_id FROM quotations WHERE quotation_id=$6
+      )
+    `, [
+      customer.customer_name || "",
+      customer.customer_company || "",
+      customer.customer_phone || "",
+      customer.customer_address || "",
+      customer.customer_email || "",
+      id
+    ]);
+
+    /* ===== DELETE OLD ITEMS ===== */
+    await client.query(
+      `DELETE FROM quotation_items WHERE quotation_id = $1`,
+      [id]
+    );
+
+    /* ===== CALCULATE ===== */
+    let subtotal = 0;
+
+    for (const i of items) {
+      const qty = Number(i.qty) || 0;
+      const price = Number(i.unit_price) || 0;
+      const discount = Number(i.discount) || 0;
+
+      subtotal += qty * price * (1 - discount / 100);
+    }
+
+    const vat = subtotal * 0.07;
+    const total = subtotal + vat;
+
+    /* ===== INSERT NEW ITEMS ===== */
+    for (const i of items) {
+      if (!i.product_name) continue;
+
+      const qty = Number(i.qty) || 0;
+      const price = Number(i.unit_price) || 0;
+      const discount = Number(i.discount) || 0;
+
+      await client.query(
+        `INSERT INTO quotation_items
+        (quotation_id, product_name, description, qty, unit_price, discount_percent, total)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          id,
+          i.product_name || "",
+          i.description || "",
+          qty,
+          price,
+          discount,
+          qty * price * (1 - discount / 100)
+        ]
+      );
+    }
+
+    /* ===== UPDATE QUOTATION ===== */
+    await client.query(`
+      UPDATE quotations SET
+        issue_date=$1,
+        expiry_date=$2,
+        subtotal=$3,
+        vat=$4,
+        total=$5
+      WHERE quotation_id=$6
+    `, [issue_date, expiry_date, subtotal, vat, total, id]);
+
+    await client.query("COMMIT");
+
+    res.json({ success: true });
+
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    console.error("UPDATE ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/* =========================================================
+   STATUS (confirm / cancel)
 ========================================================= */
 app.put("/quotations/:id/status", async (req, res) => {
   const { id } = req.params;
