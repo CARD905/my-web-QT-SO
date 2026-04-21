@@ -33,10 +33,26 @@ app.get("/quotations", async (req, res) => {
       SELECT 
         q.*,
         c.customer_name,
-        c.customer_company
+        c.customer_company,
+
+        -- 👇 เพิ่ม field products
+        COALESCE(STRING_AGG(qi.product_name, ', '), '') AS products
+
       FROM quotations q
+
       LEFT JOIN customers c 
-      ON q.customer_id = c.customer_id
+        ON q.customer_id = c.customer_id
+
+      -- 👇 join items
+      LEFT JOIN quotation_items qi
+        ON q.quotation_id = qi.quotation_id
+
+      -- 👇 สำคัญมาก (กันข้อมูลพัง)
+      GROUP BY 
+        q.quotation_id,
+        c.customer_name,
+        c.customer_company
+
       ORDER BY q.quotation_id DESC
     `);
 
