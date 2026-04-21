@@ -85,18 +85,60 @@ export default function DetailPage() {
 
   const disabled = data.status === "cancel";
 
-  const subtotal = data.items.reduce((s: number, i: any) => s + i.qty * i.unit_price * (1 - i.discount_percent / 100), 0);
-  const totalDiscount = data.items.reduce((s: number, i: any) => s + i.qty * i.unit_price * (i.discount_percent / 100), 0);
-  const vat = subtotal * 0.07;
+  const subtotal = data.items.reduce((s: number, i: any) => {
+    let line = i.qty * i.unit_price;
+
+    if (data.discount_type === "amount") {
+      line -= i.discount_percent;
+    } else {
+      line *= (1 - i.discount_percent / 100);
+    }
+
+    return s + line;
+  }, 0);
+  const totalDiscount = data.items.reduce((s: number, i: any) => {
+    if (data.discount_type === "amount") {
+      return s + i.discount_percent;
+    } else {
+      return s + i.qty * i.unit_price * (i.discount_percent / 100);
+    }
+  }, 0);
+  const vat = data.vat_enabled ? subtotal * 0.07 : 0;
   const total = subtotal + vat;
 
   const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
 
   const statusMap: Record<string, { label: string; bg: string; color: string; dot: string }> = {
-    confirmed: { label: "Approved", bg: "rgba(34,197,94,0.12)", color: "#22c55e", dot: "#22c55e" },
-    cancel:    { label: "Cancelled", bg: "rgba(239,68,68,0.12)", color: "#f87171", dot: "#f87171" },
-    sent:      { label: "Sent", bg: "rgba(99,102,241,0.12)", color: "#818cf8", dot: "#818cf8" },
-    draft:     { label: "Draft", bg: "rgba(148,163,184,0.1)", color: "#94a3b8", dot: "#94a3b8" },
+    draft: {
+      label: "Draft",
+      bg: "rgba(148,163,184,0.1)",
+      color: "#94a3b8",
+      dot: "#94a3b8"
+    },
+    sent: {
+      label: "Sent",
+      bg: "rgba(99,102,241,0.12)",
+      color: "#818cf8",
+      dot: "#818cf8"
+    },
+    approved: {
+      label: "Approved",
+      bg: "rgba(34,197,94,0.12)",
+      color: "#22c55e",
+      dot: "#22c55e"
+    },
+    cancel: {
+      label: "Cancelled",
+      bg: "rgba(239,68,68,0.12)",
+      color: "#f87171",
+      dot: "#f87171"
+    },
+    converted: {
+      label: "Converted",
+      bg: "rgba(6,182,212,0.12)",
+      color: "#06b6d4",
+      dot: "#06b6d4"
+    }
   };
   const st = statusMap[data.status] ?? statusMap["draft"];
 
@@ -116,12 +158,12 @@ export default function DetailPage() {
   };
 
   const confirm = async () => {
-    await fetch(`${API}/quotations/${id}/status`, {
-      method: "PUT", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "confirmed" }),
-    });
-    router.push(`/sale/${id}`);
-  };
+  await fetch(`${API}/quotations/${id}/convert`, {
+    method: "POST"
+  });
+
+  router.push(`/sale/${id}`);
+};
 
   return (
     <SidebarLayout>
@@ -296,8 +338,16 @@ export default function DetailPage() {
               </thead>
               <tbody>
                 {data.items.map((item: any, idx: number) => {
-                  const lineTotal = item.qty * item.unit_price * (1 - item.discount_percent / 100);
-                  const discountAmt = item.qty * item.unit_price * (item.discount_percent / 100);
+                  let lineTotal = item.qty * item.unit_price;
+                  let discountAmt = 0;
+
+                  if (data.discount_type === "amount") {
+                    discountAmt = item.discount_percent;
+                    lineTotal -= discountAmt;
+                  } else {
+                    discountAmt = item.qty * item.unit_price * (item.discount_percent / 100);
+                    lineTotal -= discountAmt;
+                  }
                   return (
                     <tr key={idx} style={{ borderBottom: idx < data.items.length - 1 ? "1px solid var(--border)" : "none" }}>
                       <td style={{ padding: "14px 12px", fontWeight: 600, color: "var(--text-primary)" }}>{item.product_name}</td>
@@ -305,7 +355,10 @@ export default function DetailPage() {
                       <td style={{ padding: "14px 12px", textAlign: "right", color: "var(--text-secondary)" }}>{item.qty}</td>
                       <td style={{ padding: "14px 12px", textAlign: "right", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{money(item.unit_price)}</td>
                       <td style={{ padding: "14px 12px", textAlign: "right", color: "#f87171", fontWeight: 600 }}>
-                        {item.discount_percent ? `-${item.discount_percent}%` : money(discountAmt)}
+                        {data.discount_type === "amount"
+                          ? `-${money(item.discount_percent)}`
+                          : `-${item.discount_percent}%`
+}
                       </td>
                       <td style={{ padding: "14px 12px", textAlign: "right", fontWeight: 700, color: "var(--text-primary)", fontFamily: "var(--font-mono)" }}>{money(lineTotal)}</td>
                     </tr>

@@ -25,7 +25,7 @@ app.use((req, res, next) => {
 });
 
 /* =========================================================
-   GET ALL QUOTATIONS  (ต้องมาก่อน /:id)
+   GET ALL QUOTATIONS
 ========================================================= */
 app.get("/quotations", async (req, res) => {
   try {
@@ -34,33 +34,17 @@ app.get("/quotations", async (req, res) => {
         q.*,
         c.customer_name,
         c.customer_company,
-
-        -- 👇 เพิ่ม field products
         COALESCE(STRING_AGG(qi.product_name, ', '), '') AS products
-
       FROM quotations q
-
-      LEFT JOIN customers c 
-        ON q.customer_id = c.customer_id
-
-      -- 👇 join items
-      LEFT JOIN quotation_items qi
-        ON q.quotation_id = qi.quotation_id
-
-      -- 👇 สำคัญมาก (กันข้อมูลพัง)
-      GROUP BY 
-        q.quotation_id,
-        c.customer_name,
-        c.customer_company
-
+      LEFT JOIN customers c ON q.customer_id = c.customer_id
+      LEFT JOIN quotation_items qi ON q.quotation_id = qi.quotation_id
+      GROUP BY q.quotation_id, c.customer_name, c.customer_company
       ORDER BY q.quotation_id DESC
     `);
 
     res.json(r.rows);
-
   } catch (err: any) {
-    console.error("GET QUOTATIONS ERROR:", err.message);
-    res.status(500).json({ error: "get quotations error" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -80,8 +64,7 @@ app.get("/quotations/:id", async (req, res) => {
         c.customer_address,
         c.customer_email
       FROM quotations q
-      LEFT JOIN customers c 
-      ON q.customer_id = c.customer_id
+      LEFT JOIN customers c ON q.customer_id = c.customer_id
       WHERE q.quotation_id = $1
     `, [id]);
 
@@ -100,8 +83,7 @@ app.get("/quotations/:id", async (req, res) => {
     });
 
   } catch (err: any) {
-    console.error("DETAIL ERROR:", err.message);
-    res.status(500).json({ error: "detail error" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -119,107 +101,127 @@ app.post("/quotations", async (req, res) => {
       customer,
       issue_date,
       expiry_date,
-      items
+      items,
+      vat_enabled,
+      discount_type,
+      payment_terms,
+      notes,
+      status
     } = req.body;
 
+    /* ===== VALIDATION ===== */
+    if (!issue_date) throw new Error("issue_date required");
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw new Error("items required");
     }
 
+    for (const i of items) {
+      if (!i.product_name) throw new Error("product_name required");
+      if (!i.qty || i.qty <= 0) throw new Error("qty invalid");
+      if (i.unit_price < 0) throw new Error("price invalid");
+      if (i.discount < 0) throw new Error("discount invalid");
+    }
+
+    /* ===== CUSTOMER ===== */
     let cid = customer_id;
 
-    /* ===== CREATE CUSTOMER ===== */
     if (!cid) {
-      if (!customer || !customer.customer_name) {
-        throw new Error("customer_name required");
-      }
-
       const c = await client.query(
         `INSERT INTO customers
         (customer_name, customer_company, customer_phone, customer_address, customer_email)
         VALUES ($1,$2,$3,$4,$5)
         RETURNING customer_id`,
         [
-          customer.customer_name || "",
-          customer.customer_company || "",
-          customer.customer_phone || "",
-          customer.customer_address || "",
-          customer.customer_email || "",
+          customer.customer_name,
+          customer.customer_company,
+          customer.customer_phone,
+          customer.customer_address,
+          customer.customer_email,
         ]
       );
-
       cid = c.rows[0].customer_id;
     }
 
     /* ===== CALCULATE ===== */
     let subtotal = 0;
 
-    for (const i of items) {
-      const qty = Number(i.qty) || 0;
-      const price = Number(i.unit_price) || 0;
-      const discount = Number(i.discount) || 0;
+    const cleanItems = items.map((i: any) => {
+      const qty = Number(i.qty);
+      const price = Number(i.unit_price);
+      const discount = Number(i.discount);
 
-      subtotal += qty * price * (1 - discount / 100);
-    }
+      let total = qty * price;
 
-    const vat = subtotal * 0.07;
-    const total = subtotal + vat;
+      if (discount_type === "amount") {
+        total -= discount;
+      } else {
+        total *= (1 - discount / 100);
+      }
 
-    /* ===== INSERT QUOTATION ===== */
+      subtotal += total;
+
+      return { ...i, total };
+    });
+
+    const vat = vat_enabled ? subtotal * 0.07 : 0;
+    const grandTotal = subtotal + vat;
+
+    /* ===== GENERATE QT NO ===== */
+    const count = await client.query(`SELECT COUNT(*) FROM quotations`);
+    const running = String(Number(count.rows[0].count) + 1).padStart(4, "0");
+    const quotationNo = `QT-2026-${running}`;
+
+    /* ===== INSERT QT ===== */
     const q = await client.query(
       `INSERT INTO quotations
-      (quotation_no, customer_id, issue_date, expiry_date, subtotal, vat, total, status)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'draft')
+      (quotation_no, customer_id, issue_date, expiry_date,
+       subtotal, vat, total,
+       vat_enabled, discount_type,
+       payment_terms, notes, status)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       RETURNING *`,
       [
-        `QT-${Date.now()}`,
+        quotationNo,
         cid,
-        issue_date || null,
-        expiry_date || null,
+        issue_date,
+        expiry_date,
         subtotal,
         vat,
-        total,
+        grandTotal,
+        vat_enabled ?? true,
+        discount_type || "percent",
+        payment_terms,
+        notes,
+        status || "draft",
       ]
     );
 
     const qid = q.rows[0].quotation_id;
 
     /* ===== INSERT ITEMS ===== */
-    for (const i of items) {
-      if (!i.product_name) continue;
-
-      const qty = Number(i.qty) || 0;
-      const price = Number(i.unit_price) || 0;
-      const discount = Number(i.discount) || 0;
-
-      const totalItem = qty * price * (1 - discount / 100);
-
+    for (const i of cleanItems) {
       await client.query(
         `INSERT INTO quotation_items
         (quotation_id, product_name, description, qty, unit_price, discount_percent, total)
         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
         [
           qid,
-          i.product_name || "",
-          i.description || "",
-          qty,
-          price,
-          discount,
-          totalItem,
+          i.product_name,
+          i.description,
+          i.qty,
+          i.unit_price,
+          i.discount,
+          i.total,
         ]
       );
     }
 
     await client.query("COMMIT");
 
-    res.json({
-      success: true,
-      quotation_id: qid,
-    });
+    res.json({ success: true, quotation_id: qid });
 
   } catch (err: any) {
     await client.query("ROLLBACK");
-    console.error("CREATE ERROR:", err.message);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -227,13 +229,26 @@ app.post("/quotations", async (req, res) => {
 });
 
 /* =========================================================
-   UPDATE STATUS (confirm / cancel)
+   UPDATE STATUS
 ========================================================= */
 app.put("/quotations/:id/status", async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
   try {
+    const check = await pool.query(
+      `SELECT status FROM quotations WHERE quotation_id = $1`,
+      [id]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: "Quotation not found" });
+    }
+
+    if (check.rows[0].status === "converted") {
+      return res.status(400).json({ error: "Already converted" });
+    }
+
     await pool.query(
       `UPDATE quotations SET status = $1 WHERE quotation_id = $2`,
       [status, id]
@@ -242,8 +257,7 @@ app.put("/quotations/:id/status", async (req, res) => {
     res.json({ success: true });
 
   } catch (err: any) {
-    console.error("STATUS ERROR:", err.message);
-    res.status(500).json({ error: "status update error" });
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -254,14 +268,96 @@ app.delete("/quotations/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
+    const check = await pool.query(
+      `SELECT status FROM quotations WHERE quotation_id = $1`,
+      [id]
+    );
+
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: "Quotation not found" });
+    }
+
+    const locked = ["sent", "approved", "converted"];
+
+    if (locked.includes(check.rows[0].status)) {
+      return res.status(400).json({ error: "Cannot delete" });
+    }
+
     await pool.query(`DELETE FROM quotation_items WHERE quotation_id = $1`, [id]);
     await pool.query(`DELETE FROM quotations WHERE quotation_id = $1`, [id]);
 
     res.json({ success: true });
 
   } catch (err: any) {
-    console.error("DELETE ERROR:", err.message);
-    res.status(500).json({ error: "delete error" });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* =========================================================
+   CONVERT TO SO
+========================================================= */
+app.post("/quotations/:id/convert", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    const { id } = req.params;
+
+    const q = await client.query(
+      `SELECT * FROM quotations WHERE quotation_id = $1`,
+      [id]
+    );
+
+    if (q.rows.length === 0) throw new Error("QT not found");
+    if (q.rows[0].is_converted) throw new Error("Already converted");
+
+    const so = await client.query(
+      `INSERT INTO sale_orders
+      (quotation_id, customer_id, total, status)
+      VALUES ($1,$2,$3,'pending')
+      RETURNING *`,
+      [id, q.rows[0].customer_id, q.rows[0].total]
+    );
+
+    const so_id = so.rows[0].id;
+
+    const items = await client.query(
+      `SELECT * FROM quotation_items WHERE quotation_id = $1`,
+      [id]
+    );
+
+    for (const i of items.rows) {
+      await client.query(
+        `INSERT INTO sale_order_items
+        (sale_order_id, product_name, qty, unit_price, total)
+        VALUES ($1,$2,$3,$4,$5)`,
+        [
+          so_id,
+          i.product_name,
+          i.qty,
+          i.unit_price,
+          i.total,
+        ]
+      );
+    }
+
+    await client.query(
+      `UPDATE quotations 
+       SET is_converted = true, status = 'converted'
+       WHERE quotation_id = $1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ success: true, so_id });
+
+  } catch (err: any) {
+    await client.query("ROLLBACK");
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -273,12 +369,9 @@ app.get("/customers", async (req, res) => {
     const r = await pool.query(
       "SELECT * FROM customers ORDER BY customer_id DESC"
     );
-
     res.json(r.rows);
-
   } catch (err: any) {
-    console.error("GET CUSTOMERS ERROR:", err.message);
-    res.status(500).json({ error: "get customers error" });
+    res.status(500).json({ error: err.message });
   }
 });
 

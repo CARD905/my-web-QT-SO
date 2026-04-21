@@ -58,6 +58,12 @@ export default function CreatePage() {
   const [date, setDate] = useState("");
   const [expiry, setExpiry] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [vatEnabled, setVatEnabled] = useState(true);
+  const [discountType, setDiscountType] = useState<"percent" | "amount">("percent");
+
+  const [paymentTerms, setPaymentTerms] = useState("Net 30");
+  const [notes, setNotes] = useState("");
+  const [status, setStatus] = useState<"draft" | "sent">("draft");  
 
   useEffect(() => {
     fetch(`${API}/customers`).then(r => r.json()).then(setCustomers);
@@ -80,15 +86,46 @@ export default function CreatePage() {
     const n = [...items]; n[i][field] = value; setItems(n);
   };
 
-  const subtotal = items.reduce((s, i) => s + i.qty * i.unit_price * (1 - i.discount / 100), 0);
-  const vat = subtotal * 0.07;
+  const calcLineTotal = (item: Item) => {
+    const base = item.qty * item.unit_price;
+
+    if (discountType === "percent") {
+      return base * (1 - item.discount / 100);
+    } else {
+      return base - item.discount;
+    }
+  };
+
+  const subtotal = items.reduce((s, i) => s + calcLineTotal(i), 0);
+  const vat = vatEnabled ? subtotal * 0.07 : 0;
   const total = subtotal + vat;
   const money = (n: number) => n.toLocaleString("en-US", { style: "currency", currency: "USD" });
+  const validate = () => {
+  if (!customer.customer_name) return "กรุณากรอกชื่อลูกค้า";
+  if (items.length === 0) return "ต้องมีสินค้า";
 
+  for (const item of items) {
+    if (!item.product_name) return "สินค้าห้ามว่าง";
+    if (item.qty <= 0) return "จำนวนต้องมากกว่า 0";
+  }
+
+  return null;
+};
   const submit = async () => {
+  const error = validate();
+  if (error) {
+    alert(error);
+    return;
+  }
+
   setSubmitting(true);
 
   try {
+    const cleanItems = items.map(i => ({
+      ...i,
+      line_total: calcLineTotal(i),
+    }));
+
     const res = await fetch(`${API}/quotations`, {
       method: "POST",
       headers: {
@@ -99,21 +136,29 @@ export default function CreatePage() {
         customer,
         issue_date: date,
         expiry_date: expiry,
-        items,
+        items: cleanItems,
+
+        subtotal,
+        vat,
+        total,
+
+        vat_enabled: vatEnabled,
+        discount_type: discountType,
+
+        payment_terms: paymentTerms,
+        notes,
+        status,
       }),
     });
 
     const data = await res.json();
 
     if (!res.ok) {
-      console.error(data);
       alert(data.error || "error");
       return;
     }
 
     alert("บันทึกสำเร็จ ✅");
-
-    // 🔥 เพิ่มอันนี้ (สำคัญ)
     router.push("/");
   } finally {
     setSubmitting(false);
@@ -276,7 +321,33 @@ export default function CreatePage() {
                 </Field>
               </div>
             </div>
+            <div style={{
+              background: "var(--bg-card)",
+              borderRadius: "14px",
+              border: "1px solid var(--border)",
+              padding: "24px",
+            }}>
+              <h2 style={{ fontSize: "14px", fontWeight: 700 }}>Business Info</h2>
 
+              <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "12px" }}>
+
+                <Field label="STATUS">
+                  <select value={status} onChange={e => setStatus(e.target.value as any)} style={inputStyle}>
+                    <option value="draft">Draft</option>
+                    <option value="sent">Sent</option>
+                  </select>
+                </Field>
+
+                <Field label="PAYMENT TERMS">
+                  <input value={paymentTerms} onChange={e => setPaymentTerms(e.target.value)} style={inputStyle} />
+                </Field>
+
+                <Field label="NOTES">
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)} style={{ ...inputStyle, minHeight: "80px" }} />
+                </Field>
+
+              </div>
+            </div>
             {/* PRODUCTS CARD */}
             <div className="fade-up fade-up-2" style={{
               background: "var(--bg-card)", borderRadius: "14px", border: "1px solid var(--border)",
@@ -386,7 +457,11 @@ export default function CreatePage() {
                               onFocus={focusStyle} onBlur={blurStyle} />
                           </td>
                           <td style={{ padding: "8px 6px" }}>
-                            <select style={{ ...inputStyle, width: "70px", padding: "8px 8px", fontSize: "12px" }}>
+                            <select
+                              value={discountType}
+                              onChange={e => setDiscountType(e.target.value as any)}
+                              style={{ ...inputStyle, width: "70px" }}
+                            >
                               <option>%</option>
                               <option>$</option>
                             </select>
@@ -448,74 +523,74 @@ export default function CreatePage() {
                 </div>
               ))}
 
+              
               {/* VAT toggle */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>VAT (7%)</span>
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer" }}>
-                  <div style={{
-                    width: "38px", height: "22px", borderRadius: "11px",
-                    background: "linear-gradient(135deg, var(--accent), var(--accent-2))",
+                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                  VAT (7%)
+                </span>
+
+                <div
+                  onClick={() => setVatEnabled(!vatEnabled)}
+                  style={{
+                    width: "38px",
+                    height: "22px",
+                    borderRadius: "11px",
+                    background: vatEnabled
+                      ? "linear-gradient(135deg, var(--accent), var(--accent-2))"
+                      : "#ccc",
+                    cursor: "pointer",
                     position: "relative",
-                  }}>
-                    <div style={{
-                      position: "absolute", right: "3px", top: "3px",
-                      width: "16px", height: "16px", borderRadius: "50%", background: "white",
-                    }} />
-                  </div>
-                  <span style={{ fontSize: "13.5px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>{money(vat)}</span>
-                </label>
+                  }}
+                >
+                  <div
+                    style={{
+                      position: "absolute",
+                      left: vatEnabled ? "19px" : "3px",
+                      top: "3px",
+                      width: "16px",
+                      height: "16px",
+                      borderRadius: "50%",
+                      background: "white",
+                    }}
+                  />
+                </div>
               </div>
-            </div>
 
-            <div style={{
-              borderTop: "1px solid var(--border)", paddingTop: "16px",
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              marginBottom: "24px",
-            }}>
-              <span style={{ fontSize: "14px", fontWeight: 800, fontFamily: "var(--font-display)", color: "var(--text-primary)", letterSpacing: "-0.02em" }}>
-                GRAND TOTAL
-              </span>
-              <span style={{
-                fontSize: "22px", fontWeight: 900,
-                fontFamily: "var(--font-mono)",
-                letterSpacing: "-0.03em",
-                background: "linear-gradient(135deg, var(--accent), var(--accent-2))",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-              }}>
-                {money(total)}
-              </span>
-            </div>
+              {/* GRAND TOTAL */}
+              <div
+                style={{
+                  borderTop: "1px solid var(--border)",
+                  paddingTop: "16px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "24px",
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: "14px",
+                    fontWeight: 800,
+                    fontFamily: "var(--font-display)",
+                    color: "var(--text-primary)",
+                  }}
+                >
+                  GRAND TOTAL
+                </span>
 
-            <button
-              onClick={submit}
-              disabled={submitting}
-              style={{
-                width: "100%", padding: "13px",
-                borderRadius: "12px", border: "none",
-                background: submitting ? "var(--border)" : "linear-gradient(135deg, #7c3aed, #db2777)",
-                color: "white",
-                fontSize: "14px", fontWeight: 800,
-                fontFamily: "var(--font-display)", letterSpacing: "-0.01em",
-                cursor: submitting ? "not-allowed" : "pointer",
-                boxShadow: submitting ? "none" : "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={e => {
-                if (!submitting) {
-                  (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)";
-                  (e.currentTarget as HTMLElement).style.boxShadow = "0 8px 28px rgba(124,58,237,0.5), 0 1px 0 rgba(255,255,255,0.15) inset";
-                }
-              }}
-              onMouseLeave={e => {
-                (e.currentTarget as HTMLElement).style.transform = "translateY(0)";
-                (e.currentTarget as HTMLElement).style.boxShadow = "0 4px 20px rgba(124,58,237,0.4), 0 1px 0 rgba(255,255,255,0.15) inset";
-              }}
-            >
-              {submitting ? "Saving..." : "✦ Save Quotation"}
-            </button>
+                <span
+                  style={{
+                    fontSize: "22px",
+                    fontWeight: 900,
+                    fontFamily: "var(--font-mono)",
+                  }}
+                >
+                  {money(total)}
+                </span>
+              </div>
           </div>
-
+          </div>
         </div>
       </div>
     </SidebarLayout>

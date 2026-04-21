@@ -1,6 +1,6 @@
 
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SidebarLayout } from "@/components/SidebarLayout";
 
@@ -12,12 +12,14 @@ type Quotation = {
   issue_date: string;
   status: string;
   total: number;
-  products: string;
+  products:string ;
 };
 
 export default function Page() {
   const [data, setData] = useState<Quotation[]>([]);
   const [search, setSearch] = useState("");
+  const [error, setError] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -28,12 +30,21 @@ export default function Page() {
   useEffect(() => {
     if (!API) return;
     fetch(`${API}/quotations`)
-      .then(res => { if (!res.ok) throw new Error("API error"); return res.json(); })
+      .then(res => {
+        if (!res.ok) throw new Error("API error");
+        return res.json();
+      })
       .then(d => setData(d || []))
-      .catch(() => setData([]))
+      .catch(() => {
+        setError("Failed to load data");
+        setData([]);
+      })
       .finally(() => setLoaded(true));
   }, [API]);
-
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
   const money = (n: number) =>
     n?.toLocaleString("en-US", { style: "currency", currency: "USD" }) ?? "—";
 
@@ -42,17 +53,21 @@ export default function Page() {
     return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
   };
 
-  const filtered = data.filter(q => {
-    const matchSearch =
-      (q.quotation_no || "").toLowerCase().includes(search.toLowerCase()) ||
-      (q.customer_name || "").toLowerCase().includes(search.toLowerCase()) ||
-      (q.customer_company || "").toLowerCase().includes(search.toLowerCase());
-    const matchStatus =
-      statusFilter === "all" ||
-      (statusFilter === "draft" && (!q.status || q.status === "draft")) ||
-      q.status === statusFilter;
-    return matchSearch && matchStatus;
-  });
+  const filtered = useMemo(() => {
+    return data.filter(q => {
+      const matchSearch =
+        (q.quotation_no || "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (q.customer_name || "").toLowerCase().includes(debouncedSearch.toLowerCase()) ||
+        (q.customer_company || "").toLowerCase().includes(debouncedSearch.toLowerCase());
+
+      const matchStatus =
+        statusFilter === "all" ||
+        (statusFilter === "draft" && (!q.status || q.status === "draft")) ||
+        q.status === statusFilter;
+
+      return matchSearch && matchStatus;
+    });
+  }, [data, debouncedSearch, statusFilter]);
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -239,7 +254,7 @@ export default function Page() {
           {/* Table header */}
           <div style={{
             display: "grid",
-            gridTemplateColumns: "190px 1fr 155px 145px 160px 44px",
+            gridTemplateColumns: "190px 1fr 1fr 155px 145px 160px 44px",
             padding: "12px 24px",
             borderBottom: "1px solid var(--border)",
           }}>
