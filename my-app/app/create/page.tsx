@@ -115,10 +115,6 @@ export default function CreatePage() {
 
     // 🔥 เพิ่มอันนี้ (สำคัญ)
     router.push("/quotations");
-
-  } catch (err) {
-    console.error("FETCH ERROR:", err);
-    alert("เชื่อม API ไม่ได้ ❌");
   } finally {
     setSubmitting(false);
   }
