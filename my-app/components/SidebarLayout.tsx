@@ -79,8 +79,8 @@ export function SidebarLayout({ children }: { children: React.ReactNode }) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
         ctx.fillStyle = theme === "dark"
-          ? `rgba(167,139,250,${p.alpha})`
-          : `rgba(124,58,237,${p.alpha * 0.6})`;
+          ? `rgba(167,139,250,0.004${p.alpha})`
+          : `rgba(124,58,237,0.004${p.alpha * 0.6})`;
         ctx.fill();
       }
       frame = requestAnimationFrame(draw);

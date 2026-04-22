@@ -263,7 +263,7 @@ export default function Page() {
                 fontSize: "10.5px", fontWeight: 700,
                 color: "var(--accent)",
                 letterSpacing: "0.08em",
-                textAlign: i >= 4 ? "right" : "left",
+                textAlign: i >= 5 ? "right" : "left",
               }}>{h}</div>
             ))}
           </div>
@@ -342,7 +342,11 @@ export default function Page() {
                 {/* Product */}
                 <div>
                   <div style={{ fontSize: "13.5px", fontWeight: 600, color: "var(--text-primary)", letterSpacing: "-0.01em" }}>
-                    {q.products || "—"}
+                    {Array.isArray(q.products)
+                      ? q.products[0] || "—"
+                      : typeof q.products === "string"
+                      ? q.products.split(",")[0].trim() || "—"
+                      : "—"}
                   </div>
                 </div>
                 {/* Date */}
