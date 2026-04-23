@@ -2,6 +2,9 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "../app/theme";
 import { useEffect, useRef } from "react";
+import { useState } from "react";
+export { useLang } from "../app/context/LangContext";
+
 
 /* ============================================================
    SIDEBAR LAYOUT  –  wrap all pages with this
@@ -14,7 +17,7 @@ import { useEffect, useRef } from "react";
 const navItems = [
   {
     label: "Dashboard",
-    href: "/quotations",
+    href: "/dashboard",
     icon: (
       <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -42,7 +45,26 @@ const navItems = [
       </svg>
     ),
   },
+  {
+    label: "Products",
+    href: "/products",
+    icon: (
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
+  {
+    label: "Customers",
+    href: "/customers",
+    icon: (
+      <svg width="18" height="18" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0121 9.414V19a2 2 0 01-2 2z" />
+      </svg>
+    ),
+  },
 ];
+
 
 export function SidebarLayout({ children }: { children: React.ReactNode }) {
   const { theme, toggle } = useTheme();

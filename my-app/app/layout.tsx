@@ -84,6 +84,8 @@
 
 import { ReactNode } from "react";
 import { ThemeProvider } from "./theme";
+import { LangProvider } from "./context/LangContext";
+
 import "./globals.css";
 
 export const metadata = {
@@ -95,7 +97,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <ThemeProvider>
-          {children}
+          <LangProvider>
+            {children}
+          </LangProvider>
         </ThemeProvider>
       </body>
     </html>
